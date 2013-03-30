@@ -1,0 +1,90 @@
+<body>
+
+<div class="navbar navbar-inverse navbar-fixed-top">
+  <div class="navbar-inner">
+  <div class="container-fluid">
+    <a class="brand" href="http://cms-sw.github.com/cmssw/faq.html">CMS Topic Collector</a>
+    <ul class="nav pull-right">
+      <li class="dropdown">
+        <a id="userInfo" class="dropdown-toggle" data-toggle="dropdown" href="#"></a>
+          <ul class="dropdown-menu" role="menu" aria-labelledby="dLabel">
+            <li id="userCern"></li>
+            <li id="userGithub"></li>
+            <li class="divider"></li>
+            <li><a href="https://login.cern.ch/adfs/ls/?wa=wsignout1.0">Logout</a></li>
+          </ul>
+      </li>
+    </ul>
+  </div>
+  </div>
+</div>
+<div class="row-fluid">
+  <div class="container-fluid">
+    <div id="myAlert" class="span12" style='padding: 15px;'></div>
+  </div>
+</div>
+<div class="row-fluid">
+  <div class="container-fluid">
+    <div id="releaseTabs" class="span12"></div>
+  </div>
+</div>
+<div class="row-fluid">
+  <form class="form-horizontal">
+    <fieldset>
+      <div id="legend">
+        <legend class="">Build and upload a private branch</legend>
+      </div>
+  
+      <!-- Branch Name -->
+      <div class="control-group">
+        <label class="control-label"  for="branch">Private branch</label>
+        <div class="controls">
+          <input type="text" id="branch" name="branch" placeholder="" class="input-xlarge">
+        </div>
+      </div>
+  
+      <!-- Package -->
+      <div class="control-group">
+        <label class="control-label" for="package">Package</label>
+        <div class="controls">
+          <input type="text" id="package" name="package" value="cmssw-tool-conf" placeholder="" class="input-xlarge">
+        </div>
+      </div>
+
+      <!-- Architecture -->
+      <div class="control-group">
+        <label class="control-label" for="architecture">Architecture</label>
+        <div class="controls">
+          <select class="span3" name="architecture" id="architecture">
+            <option value="slc5_amd64_gcc462">slc5_amd64_gcc462</option>
+            <option selected value="slc5_amd64_gcc472">slc5_amd64_gcc472</option>
+            <option value="slc6_amd64_gcc472">slc6_amd64_gcc472</option>
+          </select>
+          <select class="span2" name="release">
+            <option value="CMSSW_6_2_X">CMSSW_6_2_X</option>
+            <option value="CMSSW_6_1_X">CMSSW_6_1_X</option>
+            <option value="CMSSW_5_3_X">CMSSW_5_3_X</option>
+          </select>
+        </div>
+      </div>
+  
+      <!-- Build -->
+      <div class="control-group">
+        <div class="controls">
+          <button id="queue_request" class="btn btn-success">Build</button>
+        </div>
+      </div>
+    </fieldset>
+  </form>
+</div>
+<script>
+//alert("foo");
+//$("#queue_request").click(function() {));
+function createNewRequest()
+{
+  $.post("../buildrequests").done(function(d,a,v) {alert (d); });
+  return false;
+}
+$("#queue_request").click(createNewRequest);
+</script>
+</body>

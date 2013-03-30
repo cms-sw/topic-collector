@@ -1,0 +1,345 @@
+#!/usr/bin/env python
+# Helper script to create merge branches in the category repositories.
+#
+# Argument which it takes:
+#
+# branch_name: name of the branch to be created.
+# branch_start_point: startpoint for the branch.
+import cgitb
+cgitb.enable()
+
+import os
+import re
+import cgi
+import urllib2
+import urllib
+import random
+import shutil
+import sys
+
+try:
+  from hashlib import sha1
+except:
+  from sha import new as sha1
+
+from secrets import github_secrets, cern_secrets
+from sys import exit
+from time import mktime, strptime, strftime, gmtime, time
+from os.path import join, basename
+from glob import glob
+
+try:
+  import json
+except ImportError:
+  import cjson as json
+
+from common import format, call, patchRequest, postRequest, postRequestJSON, getRequestCached, getRequestTxt, getRequest
+from common import debug, jsonReply, httpReply, status, serveFile, error, validateInputs, badRequest, invoke
+
+def getSigningCategories(pullRequest):
+  def doGetSigningCategories(txt):
+    from categories import CMSSW_CATEGORIES
+    files = json.decode(txt)
+    stagedFiles = [f["filename"] for f in files]
+    stagedPackages = set(re.sub("([^/]*/[^/]*).*", "\\1", x) for x in stagedFiles)
+    categories = set([category for package in stagedPackages 
+                                       for (category, packages) in CMSSW_CATEGORIES.iteritems() 
+                                       if package in packages])
+    return json.encode([x for x in categories])
+
+  categories = getRequestCached("/repos/cms-sw/cmssw/pulls/%s/files" % pullRequest, 
+                                transformation=doGetSigningCategories, 
+                                transformation_id="signingCategories/v2")
+  return json.decode(categories)
+  
+# Get the list of packages for a pull request.
+def pullRequestPackages(pullRequest):
+  def doPullRequestPackages(txt):
+    files = json.decode(txt)
+    stagedFiles = [f["filename"] for f in files]
+    stagedPackages = set(re.sub("([^/]*/[^/]*).*", "\\1", x) for x in stagedFiles)
+    return json.encode([x for x in stagedPackages])
+
+  packages = getRequestCached("/repos/cms-sw/cmssw/pulls/%s/files" % pullRequest, 
+                                transformation=doPullRequestPackages, 
+                                transformation_id="requestPackages")
+  return packages
+
+# Get the information about pull request signing status.
+def pullRequestUpdateSignatures(pullRequest, signingCategories, signed=False):
+  if not signingCategories:
+    error(404, "Not found")
+  def doGetLastCommitInfo(txt):
+    commits = json.decode(txt)
+    result = {"sha": commits[0]["sha"], "tree": commits[0]["commit"]["tree"]["sha"]}
+    return json.encode(result)
+    
+  lastCommitInfo = json.decode(getRequestCached("/repos/cms-sw/cmssw/pulls/%s/commits" % pullRequest, 
+                                                transformation=doGetLastCommitInfo, 
+                                                transformation_id="lastCommitInfo"))
+  refFound = True
+  try:
+    signatureInfo = json.decode(getRequestCached("/repos/cms-sw/cmssw/git/refs/signatures/%s" % pullRequest))
+  except:
+    refFound = False
+  # There is a ref. Let's update the commit it points to.
+  if refFound:
+    commit = json.decode(getRequestCached("/repos/cms-sw/cmssw/git/commits/%s" % signatureInfo["object"]["sha"]))
+    signatures = json.decode(commit["message"])
+    if type(signatures) == str:
+      signatures = json.decode(signatures)
+    for s in signingCategories:
+      if signatures.has_key(s):
+        signatures[s] = signed
+    newCommit = {"message": json.encode(signatures),
+                 "parents": [commit["parents"][0]["sha"]],
+                 "tree": commit["tree"]["sha"]
+                }
+    commit = postRequest("/repos/cms-sw/cmssw/git/commits",
+                         authToken=github_secrets["production"]["admin_auth_token"],
+                         **newCommit)
+    newRef = {"sha": commit["sha"],
+              "force": True
+             }
+    signatureInfo = patchRequest("/repos/cms-sw/cmssw/git/refs/signatures/%s" % pullRequest,
+                                 authToken=github_secrets["production"]["admin_auth_token"],
+                                 **newRef)
+    return signatures
+  # Branch not found, try to create a commit.
+  signatures = json.encode(dict([[k, "pending"] for k in signingCategories]))
+  newCommit = {"message": signatures,
+               "parents": [lastCommitInfo["sha"]],
+               "tree": lastCommitInfo["tree"]
+              }
+  commit = postRequest("/repos/cms-sw/cmssw/git/commits",
+                       authToken=github_secrets["production"]["admin_auth_token"],
+                       **newCommit)
+  signatureRef = {
+       "ref": "refs/signatures/%s" % pullRequest,
+       "sha": commit["sha"]
+  }
+  signatureInfo = postRequest("/repos/cms-sw/cmssw/git/refs",
+                              authToken=github_secrets["production"]["admin_auth_token"],
+                              **signatureRef)
+  return signatures
+#
+# getSignatures 
+#
+# Get the signature information for a given pull request
+def getSignatures(pullRequest):
+  signatureRef = json.decode(getRequestCached("/repos/cms-sw/cmssw/git/refs/signatures/%s" % pullRequest))
+  signatureCommit = json.decode(getRequestCached("/repos/cms-sw/cmssw/git/commits/%s" % signatureRef["object"]["sha"]))
+  return signatureCommit["message"]
+  
+# Updates the signatures for a given pull request @a pullRequest. 
+# @a value can be either True or False which corresponds to "signed" or
+# "rejected".
+# @a all can be used to sign all the categories, assuming the user is part of
+# the cms-git-admin eGroup.
+def updateSignatures(pullRequest, value, all=False):
+  if all and not "cms-git-admins" in os.environ.get("adfs_group").split(";"):
+    error(404, "Not found")
+  from categories import CMSSW_EGROUPS_MAP
+  userCategories = [CMSSW_EGROUPS_MAP[x] 
+                    for x in os.environ.get("adfs_group").split(";")
+                    if x in CMSSW_EGROUPS_MAP]
+  signingCategories = getSigningCategories(pullRequest)
+  possibleSignatures = [x for x in signingCategories if all or x in userCategories]
+  signatures = pullRequestUpdateSignatures(pullRequest, possibleSignatures, value and "signed" or "rejected")
+  return {"pullRequest": pullRequest, "signatures": signatures}
+
+# listPending: list open pull request for a given <category>
+def listPending():
+  jsonReply(getRequestCached("/repos/cms-sw/cmssw/pulls", transformation=lambda x : x, transformation_id="identity", state="open"))
+
+def listPendingTable():
+  def getCategories(body):
+    parts = body.rsplit("## Approval Status ##", 1)
+    if len(parts) != 2:
+      return []
+    lines = parts[1].split("\n")
+    pairs = [l.split(":") for l in lines if ":" in l]
+    return dict([(k.strip(), v.strip()) for (k,v) in pairs])
+
+  def pullsToPendingTable(txt):
+    data = json.decode(txt)
+    return json.encode([{"base": {"ref": d["base"]["ref"]}, 
+                         "number": d["number"], 
+                         "html_url": d["html_url"], 
+                         "title": d["title"], 
+                         "categories": getCategories(d["body"]),
+                         "body": d["body"] } for d in data])
+  jsonReply(getRequestCached("/repos/cms-sw/cmssw/pulls", transformation=pullsToPendingTable, transformation_id="pullsToPending/v3", state="open"))
+
+def listQueues():
+  def doListQueues(txt):
+    branches = json.decode(txt)
+    return json.encode([{"ref": x["ref"].replace("refs/heads/","")} for x in branches if x["ref"].startswith("refs/heads/CMSSW")])
+  return getRequestCached("/repos/cms-sw/cmssw/git/refs/heads", transformation=doListQueues, transformation_id="queues")
+
+# Get all the pull requests for a given release.
+# Get all the signature objects for that release.
+# Calculate a unified table.
+def listPendingTopics(q):
+  def pullsToPendingTopic(txt):
+    data = json.decode(txt)
+    return json.encode([{"base": {"ref": d["base"]["ref"]},
+                         "number": d["number"],
+                         "html_url": d["html_url"],
+                         "title": d["title"],
+                         "body": d["body"].split("## Approval Status ##")[0] } for d in data])
+  result = getRequestCached("/repos/cms-sw/cmssw/pulls", transformation=pullsToPendingTopic, transformation_id="pendingTopics/v2/" + q, state="open", base=q)
+  result = json.decode(result)
+  allSigningCategories = {}
+  for r in result:
+    pullRequest = r["number"]
+    try:
+      signatures = getRequestCached("/repos/cms-sw/cmssw/git/refs/signatures/%s" % pullRequest)
+    except:
+      signingCategories = getSigningCategories(pullRequest)
+      signatures = pullRequestUpdateSignatures(pullRequest, signingCategories, "pending")
+    else:
+      signatureRef = json.decode(signatures) 
+      commit = json.decode(getRequestCached("/repos/cms-sw/cmssw/git/commits/%s" % signatureRef["object"]["sha"]))
+      signatures = json.decode(commit["message"])
+    if type(signatures) == str:
+      signatures = json.decode(signatures) 
+    r["signatures"] = signatures
+    allSigningCategories.update(signatures)
+  allSigningCategories = dict([(v,k) for (k,v) in enumerate(allSigningCategories.keys())])
+  return {"signing_categories": allSigningCategories, "pull_requests": result}
+
+def mainUrl():
+    return format('https://%(server_name)s%(script_name)s/',
+                   server_name=os.environ.get("SERVER_NAME"),
+                   script_name=os.environ.get("SCRIPT_NAME"))
+
+
+def htmlHeader():
+  return format('<!DOCTYPE html><html lang="en"><head>'
+                '<meta http-equiv="Content-type" content="text/html;charset=UTF-8">'
+                '<meta name="viewport" content="width=device-width, initial-scale=1.0">'
+                '<base href="https://%(server_name)s/%(script_name)s/" target="_self">'
+                '<link href="css/bootstrap.min.css" rel="stylesheet" media="screen">'
+                '<script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js" ></script>'
+                '<script src="js/bootstrap.min.js"></script>',
+                server_name=os.environ.get("SERVER_NAME"),
+                script_name=os.environ.get("SCRIPT_NAME"),
+    )
+
+if __name__ == "__main__":
+  if not os.environ.get("ADFS_LOGIN"):
+    print 'Status: 403 Forbidden\r\n\r\n\r\n';
+    exit(0)
+
+  etag = os.environ.get("HTTP_IF_NONE_MATCH", "")
+  data = cgi.FieldStorage()
+  # Get the CERN username, lookup for an associated github token.
+  #
+  # - If the token is not present, request one.
+  # - If the token is present, use it to fetch the user information so that we
+  #   can use it when building pages.
+  usernameSSO = os.environ.get("ADFS_LOGIN")
+  hash = sha1(usernameSSO).hexdigest()
+  userTokenPath = join(cern_secrets["tokens_path"], hash[0:2], hash[2:])
+  try: 
+    userToken = json.decode(open(join(userTokenPath, "token")).read())
+  except:
+    # Github authorization token not stored on disk. Let's see if we have some
+    # temporary code to get one.
+    code = data.getfirst("code", None)
+    state = data.getfirst("state", None)
+    # If the code is there we check that the state matches. If it doesn't, we
+    # print an error page
+    if code:
+      try:
+        secret = open(join(userTokenPath, "state")).read()
+        if state != secret:
+          error(500, "Internal Server Error")
+      except:
+        debug("Error while fetching state")
+      # State and code are here. We can request an access_token!
+      data = {"client_id": github_secrets["production"]["client_id"],
+              "client_secret": github_secrets["production"]["client_secret"],
+              "redirect_uri": mainUrl(),
+              "code": code}
+      result = urllib2.urlopen("https://github.com/login/oauth/access_token", urllib.urlencode(data))
+      userToken = cgi.parse_qs(result.read())
+      os.makedirs(userTokenPath)
+      open(join(userTokenPath, "token"), "w").write(json.encode(userToken))
+      # We just saved a token, so most likely this is the first time we connect.
+    else:
+      # If the code is not there, we need to ask for one. 
+      # We try to get the secret for a given user
+      # a given user, if the secret is not there, we write it.
+      # Then we redirect to the authorization page
+      hiddenState = None
+      try:
+        hiddenState = open(join(userTokenPath, "state")).read()
+      except:
+        hiddenState = sha1(str(random.random())).hexdigest()
+        try:
+          os.makedirs(userTokenPath)
+        except OSError, e:
+          pass
+        open(join(userTokenPath, "state"), "w").write(hiddenState)
+      githubAuthorize = format("https://github.com/login/oauth/authorize?client_id=%(client_id)s&redirect_uri=%(redirect_uri)s&state=%(state)s",
+                               client_id=github_secrets["production"]["client_id"],
+                               redirect_uri=mainUrl(),
+                               state=hiddenState)
+      print("Status: 302")
+      print("Location: " + githubAuthorize)
+      print
+
+  pathInfo = os.environ.get("PATH_INFO", "")
+  if pathInfo.startswith("/api/pulls"):
+    pullApi = {"__info": lambda p : getSignatures(p),
+               "sign": lambda p : updateSignatures(p, value=True, all=False),
+               "signAll": lambda p : updateSignatures(p, value=True, all=True),
+               "reject": lambda p : updateSignatures(p, value=False, all=False),
+    }
+    invoke(pathInfo, "pulls", pullApi)
+  elif pathInfo.startswith("/api/queues"):
+    queueApi = {"__all": lambda : listQueues(),
+                "__info": lambda p : listPendingTopics(p),
+    }
+    invoke(pathInfo, "queues", queueApi)
+  elif pathInfo.startswith("/api/auth"):
+    githubUserInfo = json.decode(getRequestCached("/user", userToken["access_token"][0]))
+    l = [x for x in os.environ.get("adfs_group").split(";") if x.startswith("cms-git-")]
+    result = {"user": os.environ.get("ADFS_LOGIN"),
+              "firstname": os.environ.get("ADFS_FIRSTNAME"),
+              "githubUser": githubUserInfo["login"],
+              "categories": l
+             }
+    jsonReply(json.encode(result))
+  elif pathInfo.startswith("/api/githubUser"):
+    getRequestCached("/user", userToken["access_token"][0], transformation=lambda x : x, transformation_id=os.environ.get("ADFS_LOGIN"))
+  elif pathInfo == "/public/listPending":
+    listPending()
+  elif pathInfo.startswith("/public/listPendingTable"):
+    listPendingTable()
+  elif pathInfo.startswith("/css/bootstrap.min.css"):
+    httpReply("text/css", etag, open("bootstrap/css/bootstrap.min.css"))
+  elif pathInfo.startswith("/js/bootstrap.min.js"):
+    httpReply("application/javascript", etag, open("bootstrap/js/bootstrap.min.js"))
+  elif pathInfo.startswith("/img/glyphicons-halflings.png"):
+    httpReply("image/png", etag, open("bootstrap/img/glyphicons-halflings.png"))
+  elif pathInfo.startswith("/img/glyphicons-halflings-white.png"):
+    httpReply("image/png", etag, open("bootstrap/img/glyphicons-halflings-white.png"))
+  elif pathInfo.strip("/") == "":
+    # Only me sees the development GUI
+    if os.environ.get("ADFS_LOGIN") == "eulisse":
+      f = open("index-dev.html")
+    else:
+      f = open("index.html")
+    httpReply("text/html", etag, htmlHeader, open("default.css"), "</head>", f, "</html>")
+  elif pathInfo.startswith("/buildRequestor"):
+    # Only me sees the development GUI
+    if os.environ.get("ADFS_LOGIN") == "eulisse":
+      f = open("build-request.html")
+    else:
+      f = open("build-request.html")
+    httpReply("text/html", etag, htmlHeader, open("default.css"), "</head>", f, "</html>")
+  else:
+    error(404, "Not Found")

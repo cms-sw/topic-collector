@@ -1,0 +1,5 @@
+*.pyc
+secrets*
+cache
+tokens
+*.sql3

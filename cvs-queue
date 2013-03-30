@@ -1,0 +1,91 @@
+#!/usr/bin/env python
+import cgitb
+cgitb.enable()
+import cgi, os, tempfile, shutil
+from ws_sso_content_reader import getContent
+from BeautifulSoup import BeautifulSoup
+from common import debug, jsonReply
+from os.path import join, exists, dirname
+from secrets import cern_secrets
+from os import fdopen
+try:
+  from json import dumps
+  from json import loads
+except ImportError:
+  from cjson import encode as dumps
+  from cjson import decode as loads
+
+try:
+  from hashlib import sha1
+except:
+  from sha import new as sha1
+
+OLD_TC_URL="https://cmstags.cern.ch/tc"
+
+# Get TC url and calculate sha1sum with the result.
+# Look if there is already a transformed object which uses the same content as
+# input
+# - If yes, simply return it.
+# - If no, transform the result, save it and return it.
+def getTCCached(url, transformation, transformation_id=""):
+  html = getContent(url, cern_secrets["usercert"], cern_secrets["userkey"])
+  contentHash = sha1(html).hexdigest()
+  hash = sha1(url + transformation_id).hexdigest()
+  cachedTransform = join("cache", hash[0:2], hash[2:], contentHash)
+  if exists(cachedTransform):
+    return file(cachedTransform).read()
+  result = transformation(html)
+  (tmpfile, tmppath) = tempfile.mkstemp(prefix='tmp', dir="cache")
+  f = fdopen(tmpfile, "w")
+  f.write(result)
+  f.close()
+  try:
+    os.makedirs(dirname(cachedTransform))
+  except OSError:
+    pass
+  try:
+    shutil.move(tmppath, cachedTransform)
+  except OSError:
+    pass
+  return result
+
+if __name__ == "__main__":
+  if not os.environ.get("ADFS_LOGIN"):
+    print 'Status: 403 Forbidden\r\n\r\n\r\n';
+    exit(0)
+  requestMethod = os.environ.get("REQUEST_METHOD")
+  pathInfo = os.environ.get("PATH_INFO", "").strip("/")
+  if requestMethod == "GET":
+    if not pathInfo:
+      def getReleaseNamesTransform(html):
+        soup = [{"name": x.text} for x in BeautifulSoup(html).findAll("span")]
+        return dumps(soup)
+      jsonReply(getTCCached(OLD_TC_URL + "/getReleasesNames?release_regex=[0-9]_X$&only_my_releases=false", getReleaseNamesTransform, "ReleaseNames/V1"))
+    if not "/" in pathInfo:
+      def getPendingTagsets(html):
+        trs = BeautifulSoup(html).find("form").findAll("tr", {"class": "hovered selectable_area"})
+        soupIDs = [tr.find("td", {"class": "tagset_id"}).text for tr in trs]
+        soupPackages = [[td.text for td in tr.findAll("td", {"class": "noborder leftalign package_name"})] for tr in trs]
+        soupTagsNew = [[td.text for td in tr.findAll("td", {"class": "noborder leftalign scrollable_list_tag_td package_tag newer_tag"})] for tr in trs]
+        soupTagsOld = [[td.text for td in tr.findAll("td", {"class": "noborder leftalign scrollable_list_tag_td package_tag"})] for tr in trs]
+        tagsets = zip(soupPackages, soupTagsNew, soupTagsOld)
+        tagsets = [zip(*x) for x in tagsets]
+        return dumps(dict([x for x in zip(soupIDs, tagsets)]))
+      release_name = pathInfo
+      pendingApproval = getTCCached(OLD_TC_URL + "/getReleaseTagsetsPendingApproval?release_name=%s" % pathInfo, getPendingTagsets, "PendingApproval/V1")
+      pendingSignature = getTCCached(OLD_TC_URL + "/getReleaseTagsetsPendingSignaturesTables?release_name=%s&show_only=false" % pathInfo, getPendingTagsets, "PendingSignature/V1")
+      results = {}
+      results.update(loads(pendingSignature))
+      results.update(loads(pendingApproval))
+      jsonReply(results)
+      
+    parts = pathInfo.split("/")
+    if len(parts) == 2:
+      def getCVSDiff(html):
+        debug(html)
+        return html
+      html = getContent(OLD_TC_URL + "/CVSDiffTagsets?tagset_ids=[%s]" % parts[1], cern_secrets["usercert"], cern_secrets["userkey"])
+      print "Status: 200 OK\n"
+      print html
+      
+  print "Status: 404 Not Found\r\n\r\n\r\n"

@@ -1,0 +1,116 @@
+#!/usr/bin/env python
+import cgitb
+cgitb.enable()
+import cgi
+import os
+from cjson import encode as dumps
+from cjson import decode as loads
+
+from common import debug, call, jsonReply, badRequest, doQuery as _doQuery
+from commands import getstatusoutput
+from sys import exit
+from time import strftime
+
+buildrequestsMapping = [("id", 0),
+   ("pid", 1),
+   ("buildMachine", 2),
+   ("lastSeen", 3),
+   ("author", 4),
+   ("payload", 5),
+   ("status", 6)]
+
+buildrequestMapping = [
+  ("id", 0),
+  ("payload", 1)
+]
+
+def columns(mapping):
+  return ",".join([k for (k,v) in mapping])
+
+def doQuery(q, mapping = None):
+  error, output = _doQuery(q, "buildrequests.sql3")
+  if not output:
+    return []
+  table = [x.split("@@@") for x in output.split("\n")]
+  if not mapping:
+    return table
+  result = []
+  for r in table:
+    result += [dict([(k, r[v]) for (k,v) in mapping])]
+  return result
+
+def getOne(q, mapping = None):
+  r = doQuery(q, mapping)
+  if r == []:
+    badRequest()
+  return r.pop()
+    
+def sanitize(s, ok="a-zA-Z0-9:_./-"):
+  re.sub("./", "", re.sub("[^%s]" % ok, "", s))
+
+if __name__ == "__main__":
+  if not os.environ.get("ADFS_LOGIN"):
+    print 'Status: 403 Forbidden\r\n\r\n\r\n';
+    exit(0)
+
+  etag = os.environ.get("HTTP_IF_NONE_MATCH", "")
+  if not os.path.exists("buildrequests.sql3"):
+    doQuery("create table if not exists BuildRequests ("
+            "id integer primary key,"
+            "release text,"
+            "architecture text,"
+            "author text,"
+            "state text,"
+            "machine text,"
+            "pid integer,"
+            "creation text,"
+            "lastModifed text,"
+            "payload text"
+            ");")
+
+  pathInfo = os.environ.get("PATH_INFO", "").strip("/")
+  requestMethod = os.environ.get("REQUEST_METHOD")
+  if requestMethod == "GET":
+    if not pathInfo:
+      jsonReply(doQuery("select * from BuildRequests;", buildrequestsMapping))
+    elif pathInfo.isdigit():
+      jsonReply(getOne("select %s from BuildRequests where id = %s;" % (columns(buildrequestMapping), pathInfo), buildrequestMapping))
+  elif requestMethod == "DELETE":
+    if pathInfo.isdigit():
+      doQuery("DELETE from BuildRequests WHERE id = %s;" % pathInfo)
+  elif requestMethod == "POST":
+    # We assume additional parameters are passed as JSON.
+    try:
+      data = loads(sys.stdin.read())
+      arch = data.getvalue("architecture")
+      release_name = data.getvalue("release_name")
+    except:
+      badRequest()
+    release_series = re.sub("(CMSSW_[0-9]_[0-9]+).*", "\1_X", release_name)
+    payload = {
+      "architecture": sanitize(data.get("architecture", "")),
+      "release_name": sanitize(data.get("release_name", "")),
+      "repository": sanitize(data.get("repositoty", "cms")),
+      "PKGTOOLS": sanitize(data.get("PKGTOOLS", "IB/%s/%s" % (release_series, arch))),
+      "CMSDIST": sanitize(data.get("CMSDIST", "IB/%s/%s" % (release_series, arch))),
+      "ignoreErrors": data.get("ignoreErrors", "") and True or False,
+      "package": sanitize(data.get("package", "cmssw-tool-conf")),
+      "continuations": sanitize(data.get("continuations", ""), ok="a-zA-Z0-9_.,;-"),
+      "syncBack": data.get("syncBack", "") and True or False,
+      "debug": data.get("debug", "") and True or False,
+      "tmpRepository": sanitize(data.get("tmpRepository", os.environ.get("ADFS_LOGIN")), "a-zA-Z0-9.")
+    }
+    currentTime = strftime("%Y-%m-%dT%H:%M:%S") 
+    request = [
+      ("release", payload["release_name"]),
+      ("architecture", payload["architecture"]),
+      ("author", os.environ.get("ADFS_LOGIN")),
+      ("state", "Pending"),
+      ("url", ""),
+      ("machine", ""),
+      ("pid", ""),
+      ("creation", currentTime),
+      ("lastModifed", currentTime),
+      ("payload", cgi.urlencode(dumps(payload))) 
+    ]
+    print doQuery("INSERT INTO BuildRequests (%s) VALUES (\"%s\");" % (columns(request), "\",".join([v for (k,v) in request])))

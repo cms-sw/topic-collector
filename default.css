@@ -1,0 +1,109 @@
+<style>
+body    {
+  padding-top:40px; 
+}
+
+a.actionLink {
+  color: rgb(65, 131, 196);
+  text-decoration: none;
+  font-size: 15px;
+}
+
+a.actionLink:hover {
+  text-decoration: underline;
+}
+
+#feedback { font-size: 1.4em; }
+
+.vertical-text {
+  display: inline-block;
+  overflow: hidden;
+  width: 1.5em;
+}
+.vertical-text__inner {
+  display: inline-block;
+  white-space: nowrap;
+  line-height: 1.5;
+  transform: translate(0,100%) rotate(-90deg);
+  transform-origin: 0 0;
+  /*Firefox*/
+  -moz-transform: rotate(-90deg);
+  /*Safari*/
+  -webkit-transform: rotate(-90deg);
+  /*Opera*/
+  -o-transform: rotate(-90deg);
+  /*IE*/
+  writing-mode: tb-rl;
+  filter: flipv fliph;
+}
+/* This element stretches the parent to be square
+   by using the mechanics of vertical margins  */
+.vertical-text__inner:after {
+  content: "";
+  display: block;
+  margin: -1.5em 0 100%;
+}
+
+tr { min-height: 130px; 
+padding: 10px;
+margin: 0px;
+}
+
+th {
+background-color:  rgb(245, 245, 245);
+margin: 0px;
+border: 0px;
+padding: 0px;
+
+}
+
+.approved {
+color: rgb(108, 198, 68);
+text-align: center;
+font-size: 26px;
+}
+
+.pending {
+color: rgb(247, 208, 46);
+text-align: center;
+font-size: 18px;
+}
+
+.rejected {
+color: rgb(188, 1, 1);
+text-align: center;
+font-size: 22px;
+}
+
+.unaffected {
+text-align: center;
+font-size: 18px;
+}
+
+.title_cell { 
+  min-width: 500px; 
+}
+
+.pullActions {
+  color: rgb(65, 131, 196);
+  font-size: 80%;
+}
+
+.title_cell a {
+  color: rgb(65, 131, 196);
+  text-decoration: none;
+}
+
+.title_cell a:hover {
+  text-decoration: underline;
+}
+
+#myTable {
+width: 80%;
+}
+table {
+background-color: rgb(250, 250, 251);
+border: 1px solid #ddd;
+border-collapse: collapse;
+}
+</style>
