@@ -265,7 +265,6 @@ if __name__ == "__main__":
               "code": code}
       result = urllib2.urlopen("https://github.com/login/oauth/access_token", urllib.urlencode(data))
       userToken = cgi.parse_qs(result.read())
-      os.makedirs(userTokenPath)
       open(join(userTokenPath, "token"), "w").write(json.encode(userToken))
       # We just saved a token, so most likely this is the first time we connect.
     else:
@@ -283,6 +282,7 @@ if __name__ == "__main__":
         except OSError, e:
           pass
         open(join(userTokenPath, "state"), "w").write(hiddenState)
+        
       githubAuthorize = format("https://github.com/login/oauth/authorize?client_id=%(client_id)s&redirect_uri=%(redirect_uri)s&state=%(state)s",
                                client_id=github_secrets["production"]["client_id"],
                                redirect_uri=mainUrl(),
