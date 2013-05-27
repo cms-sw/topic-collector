@@ -3,7 +3,7 @@
 <div class="navbar navbar-inverse navbar-fixed-top">
   <div class="navbar-inner">
   <div class="container-fluid">
-    <a class="brand" href="http://cms-sw.github.com/cmssw/faq.html">CMS Topic Collector</a>
+    <a class="brand" href="http://cms-sw.github.com/cmssw/faq.html">CMS Topic Collector - dev</a>
     <ul class="nav pull-right">
       <li class="dropdown">
         <a id="userInfo" class="dropdown-toggle" data-toggle="dropdown" href="#"></a>
@@ -41,6 +41,9 @@
     </div>
   </div>
 </div>
+<script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js" ></script>
+<script src="js/bootstrap.min.js"></script>
+<script src="js/mustache.min.js"></script>
 <script>
 var userInfo;
 function enqueue() {
@@ -141,10 +144,23 @@ $(document).ready(function() {
       }
       tabs += "</ul></div></div>";
       $("#releaseTabs").html(tabs);
-      $("#myTable").html("<h2 class='releaseLink'>Open topics for <a class='relLink' href='https://github.com/cms-sw/cmssw/tree/" + currentBranch + "'>" + currentBranch + "</a> branch.</h2>" + 
-                         "<table class='table table-condensed'><thead></thead><tbody></tbody></table>" +
-                         "<a class='actionLink' href='https://github.com/" + userInfo["githubUser"] + 
-                         "/cmssw/pull/new/cms-sw:" + currentBranch + "..." + userInfo["githubUser"] + ":master'>Create a new pull request for " + currentBranch + "</a>");
+      var view = {
+        "current_branch": currentBranch,
+        "github_user": userInfo["githubUser"],
+        "repository": userInfo["repository"],
+        "github_owner": userInfo["github_owner"],
+        "github_repo": userInfo["github_repo"],
+      };
+
+      var emptyTableTemplate = "<h2 class='releaseLink'>" + 
+                       "Open topics for <a class='relLink' href='https://github.com/{{repository}}/tree/{{current_branch}}'>{{current_branch}}</a>" + 
+                       " branch.</h2>" + 
+                       "<table class='table table-condensed'><thead></thead><tbody></tbody></table>" +
+                       "<a class='actionLink' target='_blank' href='https://github.com/{{github_user}}" +
+                       "/{{github_repo}}/pull/new/{{github_owner}}:{{current_branch}}...{{github_user}}:{{current_branch}}'>" + 
+                       "Create a new pull request for {{current_branch}}</a>";
+      
+      $("#myTable").html(Mustache.render(emptyTableTemplate, view));
     }).done(function(d1, a1, b1) {
       var currentBranch = window.location.hash.slice(1, window.location.hash.length);
       $.post("api/queues/" + currentBranch).done(function(d,a,b) {
@@ -169,13 +185,20 @@ $(document).ready(function() {
           var pr = d["pull_requests"][pri];
           
           var signatures = updateSignatures(pr["number"], pr["signatures"], categories, categoryNumber);
-          $("#myTable tbody").append("<tr id='pr" + pr["number"] + "' class='ui-widget-content'><td>" + pr["number"] +
-                                     "</td><td class='title_cell'><a href='" + pr["html_url"] + "' target='_blank'>" + pr["title"] + "</a>" +
-                                     "<span class='pullActions'>(<a target='_blank' href='https://github.com/cms-sw/cmssw/pull/" + pr["number"] + "/files'>diff</a>, " +
-                                     "<a target='_blank' href='https://github.com/cms-sw/cmssw/pull/" + pr["number"] + "/commits'>history</a>)</span>" +
-                                     "</td>" +
-                                     signatures.join("") + 
-                                     "</tr>");
+          var view = {
+            "number": pr["number"],
+            "title": pr["title"],
+            "html_url": pr["html_url"],
+            "repository": userInfo["repository"]
+          }
+          var rowTemplate = "<tr id='pr{{number}}' class='ui-widget-content'><td>{{number}}" +
+              "</td><td class='title_cell'><a href='{{html_url}}' target='_blank'>{{title}}</a>" +
+              "<span class='pullActions'>(<a target='_blank' href='https://github.com/{{repository}}/pull/{{number}}/files'>diff</a>, " +
+              "<a target='_blank' href='https://github.com/{{repository}}/pull/{{number}}/commits'>history</a>)</span>" +
+              "</td>" +
+              signatures.join("") + 
+              "</tr>";
+          $("#myTable tbody").append(Mustache.render(rowTemplate, view));
           function signAlert(message) {
             $("#myAlert").html('<div class="alert alert-info">' + message + '.<a class="close" data-dismiss="alert" href="#">&times;</a></div></div>');
           }
@@ -186,6 +209,7 @@ $(document).ready(function() {
           function updateSuccessful(d,a,c)
           {
             // Update signarures
+            alert(d);
             $($("#pr" + d["pullRequest"] + " td")[0]).html("foo");
             $(".alert").alert('close');
           }
