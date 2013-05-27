@@ -131,16 +131,21 @@ cmsbuild private afs area:
 
     cp ~/private/secrets.py $CMSGIT_ROOT/secrets.py
     mkdir -p $WORKDIR/cmsgit-data/secrets
-    mkdir -p $WORKDIR/cmsgit-data/tokens
-    mkdir -p $WORKDIR/cmsgit-data/cache
     cp ~/.globus/usercert.pem $WORKDIR/cmsgit-data/secrets/usercert.pem
     cp ~/.globus/userkey.pem $WORKDIR/cmsgit-data/secrets/userkey.pem
 
 Make sure you cannot access the file from the web and make sure they cannot be
 read by anyone but your user and the webserver.
 
-The last bit of information is the CACHE_PATH, which you need to point again to
-the cmsgit-data area.
+Finally we need to create a couple of web writeable directories which will be used
+to hold cached results (FIXME: use MEMCACHE / real DB).
+
+    mkdir -p $WORKDIR/cmsgit-data/tokens
+    mkdir -p $WORKDIR/cmsgit-data/cache
+    fs sa -dir $WORKDIR/cmsgit-data/tokens -acl webserver:afs rlwikd
+    fs sa -dir $WORKDIR/cmsgit-data/tokens -acl system:anyuser none
+    fs sa -dir $WORKDIR/cmsgit-data/cache -acl webserver:afs rlwikd
+    fs sa -dir $WORKDIR/cmsgit-data/cache -acl system:anyuser none
 
 # API
 
