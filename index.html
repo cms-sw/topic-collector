@@ -11,6 +11,8 @@
             <li id="userCern"></li>
             <li id="userGithub"></li>
             <li class="divider"></li>
+            <li id="userCategories"></li>
+            <li class="divider"></li>
             <li><a href="https://login.cern.ch/adfs/ls/?wa=wsignout1.0">Logout</a></li>
           </ul>
       </li>
@@ -49,15 +51,16 @@ var userInfo;
 function enqueue() {
 }
 
-function updateSignatures(pullRequestId, newSignatures, categories, categoryNumber)
+function updateSignatures(pullRequestId, newSignatures, categories)
 {
   var signatures = [];
   var signatureValues = {
     "signed": "<td align='middle' class='approved'>&#9679;</td>",
     "pending": "<td align='middle' class='pending'>&#9650;</td>",
+    "rejected": "<td align='middle' class='rejected'>&#9632;</td>",
   }
   // Reset all signatures.
-  for (var si = 0; si < categoryNumber; ++si)
+  for (var si = 0; si < Object.keys(categories).length; ++si)
     signatures[si] = "<td align='middle'>-</td>";
   var canSign = false;
   // Change to active those for which we have a signature
@@ -68,16 +71,32 @@ function updateSignatures(pullRequestId, newSignatures, categories, categoryNumb
         canSign = true;
     signatures[categories[signature]] = signatureValues[newSignatures[signature]];
   }
-  var canSignTxt = "<td>";
-  if (canSign)
-    canSignTxt += "<a class='btn btn-success btn-mini' id='sign_" + pullRequestId + "'><i class='icon-thumbs-up icon-white'></i> sign</a>" +
-                  "&nbsp;<a class='btn btn-danger btn-mini' id='reject_" + pullRequestId + "'><i class='icon-thumbs-down icon-white'></i> reject</a>";
-  if (userInfo["isAdmin"])
-    canSignTxt += "&nbsp;<a class='btn btn-inverse btn-mini' id='signAll_" + pullRequestId + "'><i class='icon-thumbs-up icon-white'></i> sign all</a>";
-  canSignTxt += "</td>";
-  signatures[signatures.length] = canSignTxt;
+  var view = {
+    "can_sign": canSign,
+    "is_admin": userInfo["isAdmin"],
+    "pullrequest_id": pullRequestId
+  };
+  var signatureTemplate = "<td>" + 
+                          "{{#can_sign}}" + 
+                          "<a class='btn btn-success btn-mini' id='sign_{{pullrequest_id}}'><i class='icon-thumbs-up icon-white'></i> sign</a>" +
+                          "&nbsp;<a class='btn btn-danger btn-mini' id='reject_{{pullrequest_id}}'><i class='icon-thumbs-down icon-white'></i> reject</a>" +
+                          "{{/can_sign}}" + 
+                          "{{#is_admin}}" + 
+                          "&nbsp;<a class='btn btn-inverse btn-mini' id='signAll_{{pullrequest_id}}'><i class='icon-thumbs-up icon-white'></i> sign all</a>" +
+                          "{{/is_admin}}" + 
+                          "</td>";
+
+  signatures[signatures.length] = Mustache.render(signatureTemplate, view);
   return signatures;
 }
+
+var rowTemplate = "<tr id='pr{{number}}' class='ui-widget-content'><td>{{number}}" +
+                  "</td><td class='title_cell'><a href='{{html_url}}' target='_blank'>{{title}}</a>" +
+                  "<span class='pullActions'>(<a target='_blank' href='https://github.com/{{repository}}/pull/{{number}}/files'>diff</a>, " +
+                  "<a target='_blank' href='https://github.com/{{repository}}/pull/{{number}}/commits'>history</a>," +
+                  "<a target='_blank' href='https://github.com/{{repository}}/pull/{{number}}.patch'>patch</a>)</span>" +
+                  "</td>{{{signature_buttons}}}" +
+                  "</tr>";
 
 $(document).ready(function() {
   var userInfoPromise = $.post("api/auth").done(function(d,a,b) {
@@ -105,15 +124,20 @@ $(document).ready(function() {
       "cms-git-visualization": "Visualization"
     }
     userInfo = d;
+    var realCategories = [];
     for (var i = 0; i < userCategories.length; ++i) {
       if (userCategories[i] == "cms-git-admins")
         userInfo["isAdmin"] = true;
       var realName = mapEgroups[userCategories[i]];
       if (!realName)
         continue;
-      userCanSign[mapEgroups[userCategories[i]]] = true;
+      userCanSign[realName] = true;
+      realCategories[realCategories.length] = realName;
     }
     userInfo["canSign"] = userCanSign;
+    var categoriesSummaryTmpl = "<a>Signs for: <ul>{{#categories}}<li>{{.}}</li>{{/categories}}</ul></a>";
+    $("#userCategories").html(Mustache.render(categoriesSummaryTmpl, {"categories": realCategories}));
+     
     foo = userInfo;
   });
 
@@ -170,12 +194,10 @@ $(document).ready(function() {
           return;
         }
         var headers = [];
-        var categoryNumber = 0;
         var categories = d["signing_categories"];
         for (var sci in categories)
         {
           headers[categories[sci]] = '<th><div class="vertical-text"><div class="vertical-text__inner">' + sci + "</div></div></th>";
-          categoryNumber += 1;
         }
         $("#myTable thead").html("<tr><th>id</th><th>Pull request title</th>" + headers.join("") + "<th>Actions</th></tr>");
 
@@ -184,20 +206,15 @@ $(document).ready(function() {
         {
           var pr = d["pull_requests"][pri];
           
-          var signatures = updateSignatures(pr["number"], pr["signatures"], categories, categoryNumber);
+          var signatures = updateSignatures(pr["number"], pr["signatures"], categories);
           var view = {
             "number": pr["number"],
             "title": pr["title"],
             "html_url": pr["html_url"],
-            "repository": userInfo["repository"]
+            "repository": userInfo["repository"],
+            "signature_buttons": signatures.join("")
           }
-          var rowTemplate = "<tr id='pr{{number}}' class='ui-widget-content'><td>{{number}}" +
-              "</td><td class='title_cell'><a href='{{html_url}}' target='_blank'>{{title}}</a>" +
-              "<span class='pullActions'>(<a target='_blank' href='https://github.com/{{repository}}/pull/{{number}}/files'>diff</a>, " +
-              "<a target='_blank' href='https://github.com/{{repository}}/pull/{{number}}/commits'>history</a>)</span>" +
-              "</td>" +
-              signatures.join("") + 
-              "</tr>";
+          var row = Mustache.render(rowTemplate, view);
           $("#myTable tbody").append(Mustache.render(rowTemplate, view));
           function signAlert(message) {
             $("#myAlert").html('<div class="alert alert-info">' + message + '.<a class="close" data-dismiss="alert" href="#">&times;</a></div></div>');
@@ -209,8 +226,15 @@ $(document).ready(function() {
           function updateSuccessful(d,a,c)
           {
             // Update signarures
-            alert(d);
-            $($("#pr" + d["pullRequest"] + " td")[0]).html("foo");
+            view["number"] = d["pullRequest"]; 
+            view["signature_buttons"] = updateSignatures(d["pullRequest"], d["signatures"], categories);
+            var newRow = $(Mustache.render(rowTemplate, view));
+            var oldCells = $("#pr" + d["pullRequest"] + " td");
+            for (var uri = 2; uri < 2+Object.keys(categories).length; ++uri)
+            {
+              var newTd = $($(newRow[0]).children('td')[2]);
+              $(oldCells[uri]).replaceWith(newTd);
+            } 
             $(".alert").alert('close');
           }
 
