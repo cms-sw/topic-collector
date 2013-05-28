@@ -304,7 +304,7 @@ if __name__ == "__main__":
     }
     invoke(pathInfo, "queues", queueApi)
   elif pathInfo.startswith("/api/auth"):
-    githubUserInfo = json.decode(getRequestCached("/user", userToken["access_token"][0], transformation=lambda x : x, transformation_id="auth/v2"))
+    githubUserInfo = json.decode(getRequestCached("/user", userToken["access_token"][0], transformation=lambda x : x, transformation_id="auth/v3"))
     l = [x for x in os.environ.get("adfs_group").split(";") if x.startswith("cms-git-")]
     result = {"user": os.environ.get("ADFS_LOGIN"),
               "firstname": os.environ.get("ADFS_FIRSTNAME"),
