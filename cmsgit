@@ -304,11 +304,22 @@ if __name__ == "__main__":
     }
     invoke(pathInfo, "queues", queueApi)
   elif pathInfo.startswith("/api/auth"):
-    githubUserInfo = json.decode(getRequestCached("/user", userToken["access_token"][0], transformation=lambda x : x, transformation_id="auth/v3"))
+    # Get Not only the user info but also if it has a forked repository.
+    def doGetUserInfo(s):
+      userInfo = json.decode(s)
+      try:
+        json.decode(getRequestCached("/repos/%s/%s" % (userInfo["login"], 
+                                                       config["repository"].split("/")[1]), userToken["access_token"][0]))
+        userInfo["has_fork"] = True
+      except:
+        userInfo["has_fork"] = False
+      return json.encode(userInfo)
+    githubUserInfo = json.decode(getRequestCached("/user", userToken["access_token"][0], transformation=doGetUserInfo, transformation_id="auth/v11"))
     l = [x for x in os.environ.get("adfs_group").split(";") if x.startswith("cms-git-")]
     result = {"user": os.environ.get("ADFS_LOGIN"),
               "firstname": os.environ.get("ADFS_FIRSTNAME"),
               "githubUser": githubUserInfo["login"],
+              "has_fork": githubUserInfo["has_fork"],
               "repository": config["repository"],
               "github_owner": config["repository"].split("/")[0],
               "github_repo": config["repository"].split("/")[1],
