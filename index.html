@@ -175,15 +175,18 @@ $(document).ready(function() {
         "repository": userInfo["repository"],
         "github_owner": userInfo["github_owner"],
         "github_repo": userInfo["github_repo"],
+        "has_fork": userInfo["has_fork"],
       };
 
       var emptyTableTemplate = "<h2 class='releaseLink'>" + 
                        "Open topics for <a class='relLink' href='https://github.com/{{repository}}/tree/{{current_branch}}'>{{current_branch}}</a>" + 
                        " branch.</h2>" + 
                        "<table class='table table-condensed'><thead></thead><tbody></tbody></table>" +
-                       "<a class='actionLink' target='_blank' href='https://github.com/{{github_user}}" +
+                       "{{#has_fork}}<a class='actionLink' target='_blank' href='https://github.com/{{github_user}}" +
                        "/{{github_repo}}/pull/new/{{github_owner}}:{{current_branch}}...{{github_user}}:{{current_branch}}'>" + 
-                       "Create a new pull request for {{current_branch}}</a>";
+                       "Create a new pull request for {{current_branch}}</a>{{/has_fork}}" +
+                       "{{^has_fork}}You do not have a fork of {{github_repo}}.<a class='actionLink' target='_blank' href='https://github.com/{{repository}}/fork'>" +
+                       "Fork it to propose changes.</a>{{/has_fork}}";
       
       $("#myTable").html(Mustache.render(emptyTableTemplate, view));
     }).done(function(d1, a1, b1) {
