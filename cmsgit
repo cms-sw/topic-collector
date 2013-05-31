@@ -144,6 +144,38 @@ def getSignatures(pullRequest):
   signatureCommit = json.decode(getRequestCached("/repos/%(repository)s/git/commits/%(sha)s" % options))
   return signatureCommit["message"]
  
+def doGetUserInfo(s):
+  userInfo = json.decode(s)
+  try:
+    json.decode(getRequestCached("/repos/%s/%s" % (userInfo["login"], 
+                                                   config["repository"].split("/")[1]), userToken["access_token"][0]))
+    userInfo["has_fork"] = True
+  except:
+    userInfo["has_fork"] = False
+  return json.encode(userInfo)
+
+def notifySigned(request_id, possibleSignatures, action):
+  githubUserInfo = json.decode(getRequestCached("/user", userToken["access_token"][0], transformation=doGetUserInfo, transformation_id="auth/v11"))
+  cernUser = os.environ.get("ADFS_LOGIN")
+  signedBy = "%s (a.k.a. @%s on GitHub)" % (cernUser, githubUserInfo["login"])
+  if githubUserInfo["login"] == cernUser:
+    signedBy = "@" + cernUser
+  changesTxt = format("The following categories have been %(action)s by %(signedBy)s: %(categories)s",
+                      action=action,
+                      signedBy=signedBy,
+                      categories=", ".join(possibleSignatures))
+  comment = {
+      "body": changesTxt,
+      "in_reply_to": -1
+  }
+   
+  url = format("/repos/%(repository)s/issues/%(request_id)s/comments",
+               repository=config["repository"],
+               request_id=request_id)
+  postRequest(url,
+              authToken=github_secrets["production"]["admin_auth_token"],
+              **comment)
+
 # Updates the signatures for a given pull request @a pullRequest. 
 # @a value can be either True or False which corresponds to "signed" or
 # "rejected".
@@ -159,6 +191,7 @@ def updateSignatures(pullRequest, value, all=False):
   signingCategories = getSigningCategories(pullRequest)
   possibleSignatures = [x for x in signingCategories if all or x in userCategories]
   signatures = pullRequestUpdateSignatures(pullRequest, possibleSignatures, value and "signed" or "rejected")
+  notifySigned(pullRequest, possibleSignatures, value and "signed" or "rejected")
   return {"pullRequest": pullRequest, "signatures": signatures}
 
 # listPending: list open pull request for a given <category>
@@ -307,15 +340,6 @@ if __name__ == "__main__":
     invoke(pathInfo, "queues", queueApi)
   elif pathInfo.startswith("/api/auth"):
     # Get Not only the user info but also if it has a forked repository.
-    def doGetUserInfo(s):
-      userInfo = json.decode(s)
-      try:
-        json.decode(getRequestCached("/repos/%s/%s" % (userInfo["login"], 
-                                                       config["repository"].split("/")[1]), userToken["access_token"][0]))
-        userInfo["has_fork"] = True
-      except:
-        userInfo["has_fork"] = False
-      return json.encode(userInfo)
     githubUserInfo = json.decode(getRequestCached("/user", userToken["access_token"][0], transformation=doGetUserInfo, transformation_id="auth/v11"))
     l = [x for x in os.environ.get("adfs_group").split(";") if x.startswith("cms-git-")]
     result = {"user": os.environ.get("ADFS_LOGIN"),

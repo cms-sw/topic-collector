@@ -82,6 +82,7 @@ def postRequest(api, authToken=None, **kwds):
   data=json.encode(kwds)
   request = urllib2.Request(call(api, authToken))
   request.add_data(data)
+  request.get_method = lambda: 'POST'
   request.add_header("Content-Type", "application/x-www-form-urlencoded")
   request.add_header("Content-Length", str(len(data)))
   response = opener.open(request)
