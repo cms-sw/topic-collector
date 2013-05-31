@@ -5,8 +5,6 @@
 #
 # branch_name: name of the branch to be created.
 # branch_start_point: startpoint for the branch.
-import cgitb
-cgitb.enable()
 
 import os
 import re
@@ -24,6 +22,10 @@ except:
 
 from secrets import github_secrets
 from secrets import cern_secrets as config
+# Do not debug by default.
+if config.get("debug", False):
+  import cgitb
+  cgitb.enable()
 from sys import exit
 from time import mktime, strptime, strftime, gmtime, time
 from os.path import join, basename
