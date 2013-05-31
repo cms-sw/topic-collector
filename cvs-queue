@@ -1,12 +1,13 @@
 #!/usr/bin/env python
-import cgitb
-cgitb.enable()
 import cgi, os, tempfile, shutil
 from ws_sso_content_reader import getContent
 from BeautifulSoup import BeautifulSoup
 from common import debug, jsonReply
 from os.path import join, exists, dirname
-from secrets import cern_secrets
+from secrets import cern_secrets as config
+if config.get("debug", False):
+  import cgitb
+  cgitb.enable()
 from os import fdopen
 try:
   from json import dumps
@@ -28,14 +29,14 @@ OLD_TC_URL="https://cmstags.cern.ch/tc"
 # - If yes, simply return it.
 # - If no, transform the result, save it and return it.
 def getTCCached(url, transformation, transformation_id=""):
-  html = getContent(url, cern_secrets["usercert"], cern_secrets["userkey"])
+  html = getContent(url, config["usercert"], config["userkey"])
   contentHash = sha1(html).hexdigest()
   hash = sha1(url + transformation_id).hexdigest()
-  cachedTransform = join("cache", hash[0:2], hash[2:], contentHash)
+  cachedTransform = join(config["tccache"], hash[0:2], hash[2:], contentHash)
   if exists(cachedTransform):
     return file(cachedTransform).read()
   result = transformation(html)
-  (tmpfile, tmppath) = tempfile.mkstemp(prefix='tmp', dir="cache")
+  (tmpfile, tmppath) = tempfile.mkstemp(prefix='tmp', dir=config["tccache"])
   f = fdopen(tmpfile, "w")
   f.write(result)
   f.close()
@@ -84,7 +85,7 @@ if __name__ == "__main__":
       def getCVSDiff(html):
         debug(html)
         return html
-      html = getContent(OLD_TC_URL + "/CVSDiffTagsets?tagset_ids=[%s]" % parts[1], cern_secrets["usercert"], cern_secrets["userkey"])
+      html = getContent(OLD_TC_URL + "/CVSDiffTagsets?tagset_ids=[%s]" % parts[1], config["usercert"], config["userkey"])
       print "Status: 200 OK\n"
       print html
       
