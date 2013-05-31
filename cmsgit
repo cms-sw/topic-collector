@@ -72,6 +72,7 @@ def pullRequestPackages(pullRequest):
                                 transformation_id="requestPackages")
   return packages
 
+
 # Get the information about pull request signing status.
 def pullRequestUpdateSignatures(pullRequest, signingCategories, signed=False):
   if not signingCategories:
@@ -370,11 +371,7 @@ if __name__ == "__main__":
     f = open("index.html")
     httpReply("text/html", etag, htmlHeader, open("default.css"), "</head>", f, "</html>")
   elif pathInfo.startswith("/buildRequestor"):
-    # Only me sees the development GUI
-    if os.environ.get("ADFS_LOGIN") == "eulisse":
-      f = open("build-request.html")
-    else:
-      f = open("build-request.html")
+    f = open("build-request.html")
     httpReply("text/html", etag, htmlHeader, open("default.css"), "</head>", f, "</html>")
   else:
     error(404, "Not Found")
