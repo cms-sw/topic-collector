@@ -163,10 +163,12 @@ def notifySigned(request_id, possibleSignatures, action, cernCategories):
   signedBy = "%s (a.k.a. @%s on GitHub)" % (cernUser, githubUserInfo["login"])
   if githubUserInfo["login"] == cernUser:
     signedBy = "@" + cernUser
-  changesTxt = format("The following categories have been %(action)s by %(signedBy)s: %(categories)s",
+  changesTxt = format("The following categories have been %(action)s by %(signedBy)s: %(categories)s"
+                      "\n\n\n%(cern_categories)s",
                       action=action,
                       signedBy=signedBy,
-                      categories=", ".join(possibleSignatures))
+                      categories=", ".join(possibleSignatures),
+                      cern_categories=", ".join(["@%s" % x for x in cernCategories]))
   comment = {
       "body": changesTxt,
       "in_reply_to": -1
@@ -188,13 +190,14 @@ def updateSignatures(pullRequest, value, all=False):
   if all and not "cms-git-admins" in os.environ.get("adfs_group").split(";"):
     error(404, "Not found")
   from categories import CMSSW_EGROUPS_MAP
-  userCategories = [CMSSW_EGROUPS_MAP[x] 
-                    for x in os.environ.get("adfs_group").split(";")
+  cernCategories = [x for x in os.environ.get("adfs_group", "").split(";") 
                     if x in CMSSW_EGROUPS_MAP]
+  userCategories = [CMSSW_EGROUPS_MAP[x] 
+                    for x in cernCategories]
   signingCategories = getSigningCategories(pullRequest)
   possibleSignatures = [x for x in signingCategories if all or x in userCategories]
   signatures = pullRequestUpdateSignatures(pullRequest, possibleSignatures, value and "signed" or "rejected")
-  notifySigned(pullRequest, possibleSignatures, value and "signed" or "rejected")
+  notifySigned(pullRequest, possibleSignatures, value and "signed" or "rejected", cernCategories)
   return {"pullRequest": pullRequest, "signatures": signatures}
 
 # listPending: list open pull request for a given <category>
