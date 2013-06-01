@@ -35,8 +35,8 @@ try:
   from json import loads as decode
   from json import dumps as encode
 except ImportError:
-  from cjson import loads as decode
-  from cjson import dumps as encode
+  from cjson import decode
+  from cjson import encode
 
 from common import format, call, patchRequest, postRequest, postRequestJSON, getRequestCached, getRequestTxt, getRequest
 from common import debug, jsonReply, httpReply, status, serveFile, error, validateInputs, badRequest, invoke
