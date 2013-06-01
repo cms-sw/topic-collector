@@ -32,9 +32,11 @@ from os.path import join, basename
 from glob import glob
 
 try:
-  import json
+  from json import loads as decode
+  from json import dumps as encode
 except ImportError:
-  import cjson as json
+  from cjson import loads as decode
+  from cjson import dumps as encode
 
 from common import format, call, patchRequest, postRequest, postRequestJSON, getRequestCached, getRequestTxt, getRequest
 from common import debug, jsonReply, httpReply, status, serveFile, error, validateInputs, badRequest, invoke
@@ -42,28 +44,28 @@ from common import debug, jsonReply, httpReply, status, serveFile, error, valida
 def getSigningCategories(pullRequest):
   def doGetSigningCategories(txt):
     from categories import CMSSW_CATEGORIES
-    files = json.decode(txt)
+    files = decode(txt)
     stagedFiles = [f["filename"] for f in files]
     stagedPackages = set(re.sub("([^/]*/[^/]*).*", "\\1", x) for x in stagedFiles)
     categories = set([category for package in stagedPackages 
                                        for (category, packages) in CMSSW_CATEGORIES.iteritems() 
                                        if package in packages])
-    return json.encode([x for x in categories])
+    return encode([x for x in categories])
 
   categories = getRequestCached(format("/repos/%(repository)s/pulls/%(request_id)s/files",
                                        repository=config["repository"],
                                        request_id=pullRequest), 
                                 transformation=doGetSigningCategories, 
                                 transformation_id="signingCategories/v2")
-  return json.decode(categories)
+  return decode(categories)
   
 # Get the list of packages for a pull request.
 def pullRequestPackages(pullRequest):
   def doPullRequestPackages(txt):
-    files = json.decode(txt)
+    files = decode(txt)
     stagedFiles = [f["filename"] for f in files]
     stagedPackages = set(re.sub("([^/]*/[^/]*).*", "\\1", x) for x in stagedFiles)
-    return json.encode([x for x in stagedPackages])
+    return encode([x for x in stagedPackages])
 
   packages = getRequestCached(format("/repos/%(repository)s/pulls/%(pullrequest_id)s/files",
                                      repository=config["repository"],
@@ -78,32 +80,32 @@ def pullRequestUpdateSignatures(pullRequest, signingCategories, signed=False):
   if not signingCategories:
     error(404, "Not found")
   def doGetLastCommitInfo(txt):
-    commits = json.decode(txt)
+    commits = decode(txt)
     result = {"sha": commits[0]["sha"], "tree": commits[0]["commit"]["tree"]["sha"]}
-    return json.encode(result)
+    return encode(result)
   options = {
     "repository": config["repository"],
     "pullrequest_id": pullRequest
   }
-  lastCommitInfo = json.decode(getRequestCached("/repos/%(repository)s/pulls/%(pullrequest_id)s/commits" % options,
+  lastCommitInfo = decode(getRequestCached("/repos/%(repository)s/pulls/%(pullrequest_id)s/commits" % options,
                                                 transformation=doGetLastCommitInfo, 
                                                 transformation_id="lastCommitInfo"))
   refFound = True
   try:
-    signatureInfo = json.decode(getRequestCached("/repos/%(repository)s/git/refs/signatures/%(pullrequest_id)s" % options))
+    signatureInfo = decode(getRequestCached("/repos/%(repository)s/git/refs/signatures/%(pullrequest_id)s" % options))
   except:
     refFound = False
   # There is a ref. Let's update the commit it points to.
   if refFound:
     options["sha"] = signatureInfo["object"]["sha"]
-    commit = json.decode(getRequestCached("/repos/%(repository)s/git/commits/%(sha)s" % options))
-    signatures = json.decode(commit["message"])
+    commit = decode(getRequestCached("/repos/%(repository)s/git/commits/%(sha)s" % options))
+    signatures = decode(commit["message"])
     if type(signatures) == str:
-      signatures = json.decode(signatures)
+      signatures = decode(signatures)
     for s in signingCategories:
       if signatures.has_key(s):
         signatures[s] = signed
-    newCommit = {"message": json.encode(signatures),
+    newCommit = {"message": encode(signatures),
                  "parents": [commit["parents"][0]["sha"]],
                  "tree": commit["tree"]["sha"]
                 }
@@ -118,7 +120,7 @@ def pullRequestUpdateSignatures(pullRequest, signingCategories, signed=False):
                                  **newRef)
     return signatures
   # Branch not found, try to create a commit.
-  signatures = json.encode(dict([[k, "pending"] for k in signingCategories]))
+  signatures = encode(dict([[k, "pending"] for k in signingCategories]))
   newCommit = {"message": signatures,
                "parents": [lastCommitInfo["sha"]],
                "tree": lastCommitInfo["tree"]
@@ -140,23 +142,23 @@ def pullRequestUpdateSignatures(pullRequest, signingCategories, signed=False):
 # Get the signature information for a given pull request
 def getSignatures(pullRequest):
   options = {"pullrequest_id": pullRequest, "repository": config["repository"]}
-  signatureRef = json.decode(getRequestCached("/repos/%(repository)s/git/refs/signatures/%(pullrequest_id)s" % options))
+  signatureRef = decode(getRequestCached("/repos/%(repository)s/git/refs/signatures/%(pullrequest_id)s" % options))
   options["sha"] = signatureRef["object"]["sha"]
-  signatureCommit = json.decode(getRequestCached("/repos/%(repository)s/git/commits/%(sha)s" % options))
+  signatureCommit = decode(getRequestCached("/repos/%(repository)s/git/commits/%(sha)s" % options))
   return signatureCommit["message"]
  
 def doGetUserInfo(s):
-  userInfo = json.decode(s)
+  userInfo = decode(s)
   try:
-    json.decode(getRequestCached("/repos/%s/%s" % (userInfo["login"], 
+    decode(getRequestCached("/repos/%s/%s" % (userInfo["login"], 
                                                    config["repository"].split("/")[1]), userToken["access_token"][0]))
     userInfo["has_fork"] = True
   except:
     userInfo["has_fork"] = False
-  return json.encode(userInfo)
+  return encode(userInfo)
 
-def notifySigned(request_id, possibleSignatures, action):
-  githubUserInfo = json.decode(getRequestCached("/user", userToken["access_token"][0], transformation=doGetUserInfo, transformation_id="auth/v11"))
+def notifySigned(request_id, possibleSignatures, action, cernCategories):
+  githubUserInfo = decode(getRequestCached("/user", userToken["access_token"][0], transformation=doGetUserInfo, transformation_id="auth/v11"))
   cernUser = os.environ.get("ADFS_LOGIN")
   signedBy = "%s (a.k.a. @%s on GitHub)" % (cernUser, githubUserInfo["login"])
   if githubUserInfo["login"] == cernUser:
@@ -203,8 +205,8 @@ def listPending():
 
 def listQueues():
   def doListQueues(txt):
-    branches = json.decode(txt)
-    return json.encode([{"ref": x["ref"].replace("refs/heads/","")} for x in branches if x["ref"].startswith("refs/heads/CMSSW")])
+    branches = decode(txt)
+    return encode([{"ref": x["ref"].replace("refs/heads/","")} for x in branches if x["ref"].startswith("refs/heads/CMSSW")])
   return getRequestCached(format("/repos/%(repository)s/git/refs/heads", 
                                  repository=config["repository"]),
                           transformation=doListQueues, transformation_id="queues")
@@ -215,15 +217,15 @@ def listQueues():
 def listPendingTopics(q):
   options = {"repository": config["repository"]}
   def pullsToPendingTopic(txt):
-    data = json.decode(txt)
-    return json.encode([{"base": {"ref": d["base"]["ref"]},
+    data = decode(txt)
+    return encode([{"base": {"ref": d["base"]["ref"]},
                          "number": d["number"],
                          "html_url": d["html_url"],
                          "title": d["title"],
                          "body": d["body"].split("## Approval Status ##")[0] } for d in data])
   result = getRequestCached("/repos/%(repository)s/pulls" % options, 
                             transformation=pullsToPendingTopic, transformation_id="pendingTopics/v2/" + q, state="open", base=q)
-  result = json.decode(result)
+  result = decode(result)
   allSigningCategories = {}
   for r in result:
     options.update({"sha": None, "pullrequest_id": None})
@@ -235,12 +237,12 @@ def listPendingTopics(q):
       signingCategories = getSigningCategories(pullRequest)
       signatures = pullRequestUpdateSignatures(pullRequest, signingCategories, "pending")
     else:
-      signatureRef = json.decode(signatures) 
+      signatureRef = decode(signatures) 
       options["sha"] = signatureRef["object"]["sha"]
-      commit = json.decode(getRequestCached("/repos/%(repository)s/git/commits/%(sha)s" % options))
-      signatures = json.decode(commit["message"])
+      commit = decode(getRequestCached("/repos/%(repository)s/git/commits/%(sha)s" % options))
+      signatures = decode(commit["message"])
     if type(signatures) == str:
-      signatures = json.decode(signatures) 
+      signatures = decode(signatures) 
     r["signatures"] = signatures
     allSigningCategories.update(signatures)
   allSigningCategories = dict([(v,k) for (k,v) in enumerate(allSigningCategories.keys())])
@@ -278,7 +280,7 @@ if __name__ == "__main__":
   hash = sha1(usernameSSO).hexdigest()
   userTokenPath = join(config["tokens_path"], hash[0:2], hash[2:])
   try: 
-    userToken = json.decode(open(join(userTokenPath, "token")).read())
+    userToken = decode(open(join(userTokenPath, "token")).read())
   except:
     # Github authorization token not stored on disk. Let's see if we have some
     # temporary code to get one.
@@ -300,7 +302,7 @@ if __name__ == "__main__":
               "code": code}
       result = urllib2.urlopen("https://github.com/login/oauth/access_token", urllib.urlencode(data))
       userToken = cgi.parse_qs(result.read())
-      open(join(userTokenPath, "token"), "w").write(json.encode(userToken))
+      open(join(userTokenPath, "token"), "w").write(encode(userToken))
       # We just saved a token, so most likely this is the first time we connect.
     else:
       # If the code is not there, we need to ask for one. 
@@ -341,7 +343,7 @@ if __name__ == "__main__":
     invoke(pathInfo, "queues", queueApi)
   elif pathInfo.startswith("/api/auth"):
     # Get Not only the user info but also if it has a forked repository.
-    githubUserInfo = json.decode(getRequestCached("/user", userToken["access_token"][0], transformation=doGetUserInfo, transformation_id="auth/v11"))
+    githubUserInfo = decode(getRequestCached("/user", userToken["access_token"][0], transformation=doGetUserInfo, transformation_id="auth/v11"))
     l = [x for x in os.environ.get("adfs_group").split(";") if x.startswith("cms-git-")]
     result = {"user": os.environ.get("ADFS_LOGIN"),
               "firstname": os.environ.get("ADFS_FIRSTNAME"),
@@ -352,7 +354,7 @@ if __name__ == "__main__":
               "github_repo": config["repository"].split("/")[1],
               "categories": l
              }
-    jsonReply(json.encode(result))
+    jsonReply(encode(result))
   elif pathInfo.startswith("/api/githubUser"):
     getRequestCached("/user", userToken["access_token"][0], transformation=lambda x : x, transformation_id=os.environ.get("ADFS_LOGIN"))
   elif pathInfo == "/public/listPending":
