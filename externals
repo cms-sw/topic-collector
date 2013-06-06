@@ -1,0 +1,80 @@
+#!/usr/bin/env python
+import cgi, os, tempfile, shutil
+from ws_sso_content_reader import getContent
+from BeautifulSoup import BeautifulSoup
+from common import debug, jsonReply, error
+from os.path import join, exists, dirname
+from secrets import cern_secrets as config
+from urllib2 import urlopen
+
+if config.get("debug", True):
+  import cgitb
+  cgitb.enable()
+from os import fdopen
+try:
+  from json import dumps
+  from json import loads
+except ImportError:
+  from cjson import encode as dumps
+  from cjson import decode as loads
+
+try:
+  from hashlib import sha1
+except:
+  from sha import new as sha1
+
+GITHUB_CMSDIST_REPO="https://raw.github.com/cms-sw/cmsdist/IB/%s/stable/config.map"
+
+# Get TC url and calculate sha1sum with the result.
+# Look if there is already a transformed object which uses the same content as
+# input
+# - If yes, simply return it.
+# - If no, transform the result, save it and return it.
+def getGitHubCached(url, transformation, transformation_id=""):
+  try:
+    html = urlopen(url).read()
+  except:
+    error(404, "Not Found")
+    
+  contentHash = sha1(html).hexdigest()
+  hash = sha1(url + transformation_id).hexdigest()
+  cachedTransform = join(config["tccache"], hash[0:2], hash[2:], contentHash)
+  if exists(cachedTransform):
+    return file(cachedTransform).read()
+  result = transformation(html)
+  (tmpfile, tmppath) = tempfile.mkstemp(prefix='tmp', dir=config["tccache"])
+  f = fdopen(tmpfile, "w")
+  f.write(result)
+  f.close()
+  try:
+    os.makedirs(dirname(cachedTransform))
+  except OSError:
+    pass
+  try:
+    shutil.move(tmppath, cachedTransform)
+  except OSError:
+    pass
+  return result
+
+if __name__ == "__main__":
+  if not os.environ.get("ADFS_LOGIN"):
+    print 'Status: 403 Forbidden\r\n\r\n\r\n';
+    exit(0)
+  requestMethod = os.environ.get("REQUEST_METHOD")
+  pathInfo = os.environ.get("PATH_INFO", "").strip("/")
+  if requestMethod == "GET":
+    if not pathInfo:
+      error(404, "Not Found")
+    if not "/" in pathInfo:
+      def getExternals(data):
+        lines = [x.strip().split(";") for x in data.split("\n") if x.strip()]
+        results = []
+        for line in lines:
+          parts = dict(x.split("=") for x in line)
+          results.append(dict(parts))
+        return dumps(results)
+      release_name = pathInfo
+      externals = getGitHubCached(GITHUB_CMSDIST_REPO % pathInfo, getExternals, "Externals/V2")
+      jsonReply(externals)
+      
+  error(404, "Not Found")

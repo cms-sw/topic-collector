@@ -23,9 +23,11 @@ from glob import glob
 from commands import getstatusoutput
 
 try:
-  import json
+  from json import dumps as encode
+  from json import loads as decode
 except ImportError:
-  import cjson as json
+  from cjson import encode
+  from cjson import decode 
 
 # Helper method which acutually does the sqlite query.
 # Notice that on slc4 (i.e. lxplus), there is no sqlite available, so we rely
@@ -68,30 +70,30 @@ class CreatedHandler(urllib2.HTTPSHandler):
 
 def patchRequest(api, authToken=None, **kwds):
   opener = urllib2.build_opener(CreatedHandler)
-  data=json.encode(kwds)
+  data=encode(kwds)
   request = urllib2.Request(call(api, authToken))
   request.add_data(data)
   request.get_method = lambda: 'PATCH'
   request.add_header("Content-Type", "application/x-www-form-urlencoded")
   request.add_header("Content-Length", str(len(data)))
   response = opener.open(request)
-  return json.decode(response.read())
+  return decode(response.read())
 
 def postRequest(api, authToken=None, **kwds):
   opener = urllib2.build_opener(CreatedHandler)
-  data=json.encode(kwds)
+  data=encode(kwds)
   request = urllib2.Request(call(api, authToken))
   request.add_data(data)
   request.get_method = lambda: 'POST'
   request.add_header("Content-Type", "application/x-www-form-urlencoded")
   request.add_header("Content-Length", str(len(data)))
   response = opener.open(request)
-  return json.decode(response.read())
+  return decode(response.read())
 
 def postRequestJSON(api, **kwds):
   data = urllib.urlencode(kwds)
   response = urllib2.urlopen(call(api), data)
-  return json.decode(response.read())
+  return decode(response.read())
 
 # Explot github 304 answers for faster result.
 # Get the most recent response and check if still ok.
@@ -184,7 +186,7 @@ def getRequestTxt(api, **kwds):
   return response.read()
 
 def getRequest(api,**kwds):
-  return json.decode(getRequestTxt(api,**kwds))
+  return decode(getRequestTxt(api,**kwds))
   
 def debug(s):
   print 'Status: 200 OK';
@@ -199,7 +201,7 @@ def jsonReply(s):
   if type(s) == str:
     print s
   else:
-    print json.encode(s)
+    print encode(s)
   exit(0)
 
 def httpReply(contentType, etag, *elements):
@@ -310,5 +312,5 @@ def invoke(pathInfo, klass, api):
     error("404", "Not Found")
   result = api[method](objId)
   if type(result) == dict:
-    result = json.encode(result)
+    result = encode(result)
   jsonReply(result)
