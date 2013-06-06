@@ -266,6 +266,28 @@ Response:
       }
     ]
 
+### Get externals for a given queue
+
+    GET /externals/<release-queue>
+
+where:
+
+* `<release-queue>` is the release queue for which you want to get all the
+  externals.
+
+Example:
+
+    GET /externals/CMSSW_6_2_X
+
+Response:
+
+    Status: 200 OK
+    [{
+      "CMSDIST_TAG": "IB/CMSSW_6_2_X/stable",
+      "PKGTOOLS_TAG": "V00-21-XX", 
+      "SCRAM_ARCH": "slc5_amd64_gcc472"
+    }]
+
 ### Get all tagsets relative to a given release
 
     GET /cvs-queue/<release-queue>
