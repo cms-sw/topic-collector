@@ -192,7 +192,7 @@ $(document).ready(function() {
                        "/{{github_repo}}/pull/new/{{github_owner}}:{{current_branch}}...{{github_user}}:{{current_branch}}'>" + 
                        "Create a new pull request for {{current_branch}}</a>{{/has_fork}}" +
                        "{{^has_fork}}You do not have a fork of {{github_repo}}.<a class='actionLink' target='_blank' href='https://github.com/{{repository}}/fork'>" +
-                       "Fork it to propose changes.</a>{{/has_fork}}";
+                       "Fork it to propose changes.</a>{{/has_fork}}<br/><a href='externals#{{current_branch}}' target='_blank'>Show me architectures & externals for this release series.</a>";
       
       $("#myTable").html(Mustache.render(emptyTableTemplate, view));
     }).done(function(d1, a1, b1) {
