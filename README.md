@@ -266,6 +266,25 @@ Response:
       }
     ]
 
+### Get a list of all externals queues
+
+    GET /externals
+
+where:
+
+Example:
+
+    GET /externals
+
+Response:
+
+    Status: 200 OK
+    [
+     {"ref": "CMSSW_5_3_X"}, 
+     {"ref": "CMSSW_6_1_X"}, 
+     {"ref": "CMSSW_6_2_X"}
+    ]
+
 ### Get externals for a given queue
 
     GET /externals/<release-queue>
