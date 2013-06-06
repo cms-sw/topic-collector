@@ -3,3 +3,4 @@ secrets*
 cache
 tokens
 *.sql3
+.vagrant

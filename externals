@@ -2,12 +2,13 @@
 import cgi, os, tempfile, shutil
 from ws_sso_content_reader import getContent
 from BeautifulSoup import BeautifulSoup
-from common import debug, jsonReply, error
+from common import debug, jsonReply, error, getRequestCached
 from os.path import join, exists, dirname
 from secrets import cern_secrets as config
 from urllib2 import urlopen
+import re
 
-if config.get("debug", True):
+if config.get("debug", False):
   import cgitb
   cgitb.enable()
 from os import fdopen
@@ -56,6 +57,14 @@ def getGitHubCached(url, transformation, transformation_id=""):
     pass
   return result
 
+def listQueues():
+  def doListQueues(txt):
+    branches = loads(txt)
+    matchStableBranch = "refs/heads/IB/(CMSSW_[0-9]+_[0-9]+_X)/stable"
+    return dumps([{"ref": re.sub(matchStableBranch, "\\1", x["ref"])} for x in branches if re.match(matchStableBranch, x["ref"])])
+  return getRequestCached("/repos/cms-sw/cmsdist/git/refs/heads",
+                          transformation=doListQueues, transformation_id="CMSDIST/Queues")
+
 if __name__ == "__main__":
   if not os.environ.get("ADFS_LOGIN"):
     print 'Status: 403 Forbidden\r\n\r\n\r\n';
@@ -64,7 +73,7 @@ if __name__ == "__main__":
   pathInfo = os.environ.get("PATH_INFO", "").strip("/")
   if requestMethod == "GET":
     if not pathInfo:
-      error(404, "Not Found")
+      jsonReply(listQueues())
     if not "/" in pathInfo:
       def getExternals(data):
         lines = [x.strip().split(";") for x in data.split("\n") if x.strip()]
@@ -74,7 +83,7 @@ if __name__ == "__main__":
           results.append(dict(parts))
         return dumps(results)
       release_name = pathInfo
-      externals = getGitHubCached(GITHUB_CMSDIST_REPO % pathInfo, getExternals, "Externals/V2")
+      externals = getGitHubCached(GITHUB_CMSDIST_REPO % pathInfo, getExternals, "Externals/V3")
       jsonReply(externals)
       
   error(404, "Not Found")
