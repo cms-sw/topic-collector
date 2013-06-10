@@ -82,11 +82,38 @@ if __name__ == "__main__":
       
     parts = pathInfo.split("/")
     if len(parts) == 2:
-      def getCVSDiff(html):
-        debug(html)
-        return html
-      html = getContent(OLD_TC_URL + "/CVSDiffTagsets?tagset_ids=[%s]" % parts[1], config["usercert"], config["userkey"])
-      print "Status: 200 OK\n"
-      print html
+      if parts[1] == "history":
+        def getQueueHistory(html):
+          trs = BeautifulSoup(html).find("form").findAll("tr", {"class": "hovered selectable_area"})
+          soupIDs = [tr.find("td", {"class": "tagset_id"}).text for tr in trs]
+          soupDescriptions = [[div.text for div in tr.findAll("div", {"class": "description description_in_table"})] for tr in trs]
+          soupPublishers = [[td.text for td in tr.findAll("td", {"class": "user_name"})] for tr in trs]
+          soupPackages = [[td.text for td in tr.findAll("td", {"class": "noborder leftalign package_name"})] for tr in trs]
+          soupTags = [[td.text for td in tr.findAll("td", {"class": "noborder leftalign package_tag scrollable_list_tag_td"})] for tr in trs]
+          soupReleases = [[span.text for span in tr.findAll("span", {"class": "release_name"})] for tr in trs]
+          tagsets = zip(soupPackages, soupTags)
+          tagsets = [zip(*x) for x in tagsets]
+          history = zip(soupIDs, soupDescriptions, soupPublishers, tagsets, soupReleases)
+          history.reverse()
+          history = [dict(zip(["id", "description", "publisher", "tagset", "releases"], x)) for x in history]
+          return dumps([x for x in history])
+        def getFirstTagset(html):
+          soup = BeautifulSoup(html)
+          soupPackages = [td.text for td in soup.findAll("td", {"class": "package_name"})]
+          soupTags = [td.text for td in soup.findAll("td", {"class": "package_tag scrollable_list_tag_td"})]
+          tagsets = zip(soupPackages, soupTags)
+          return dumps(tagsets)
+        history = loads(getTCCached(OLD_TC_URL + "/getReleaseHistory?release_name=%s" % parts[0], getQueueHistory, "QueueHistory/V3"))
+        firstTagsetInfo = getTCCached(OLD_TC_URL + "/getTagsetInformation?tagset_id=%s" % history[0]["id"], getFirstTagset, "FirstTagset/V1")
+        history[0]["tagset"] = loads(firstTagsetInfo)
+        jsonReply(history)
+      elif parts[1].isdigit():
+        def getCVSDiff(html):
+          debug(html)
+          return html
+        html = getContent(OLD_TC_URL + "/CVSDiffTagsets?tagset_ids=[%s]" % parts[1], config["usercert"], config["userkey"])
+        print "Status: 200 OK\n"
+        print html
+        exit(0)
       
   print "Status: 404 Not Found\r\n\r\n\r\n"
