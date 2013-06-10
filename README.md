@@ -307,9 +307,13 @@ Response:
       "SCRAM_ARCH": "slc5_amd64_gcc472"
     }]
 
-### Get all tagsets relative to a given release
+### Get all the open tagsets relative to a given release
 
     GET /cvs-queue/<release-queue>
+
+Example:
+
+    GET /cvs-queue/CMSSW_6_2_X
 
 Response:
 
@@ -317,3 +321,31 @@ Response:
     {
       "131858": [["RecoMET/METFilters", "V00-00-15", "V00-00-11-03"]]
     }
+
+### Get the history of a given release
+
+    GET /cvs-queue/<release-queue>/history
+
+Example:
+
+    GET /cvs-queue/<release-queue>/history
+
+Response:
+
+    Status: 200 OK
+    [
+      {
+        "id": "133069", 
+        "publisher": ["xxxx"], 
+        "tagset": [["HLTrigger/Configuration", "V14-10-22"]],
+        "releases": ["CMSSW_6_2_X_2013-06-10-1400"], 
+        "description": ["Comments, as found in TC"]
+      },
+      {
+        "id": "133070", 
+        "publisher": ["xxxx"], 
+        "tagset": [["HLTrigger/Configuration", "V14-10-23"]],
+        "releases": ["CMSSW_6_2_X_2013-06-11-1400", "CMSSW_6_2_X_2013-06-11-0200"], 
+        "description": ["Comments, as found in TC"]
+      },
+    ]
