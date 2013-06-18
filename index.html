@@ -138,14 +138,14 @@ $(document).ready(function() {
     var userMenuTmpl = "" +
         '<a id="userInfo" class="dropdown-toggle" data-toggle="dropdown" href="#">Welcome {{firstname}}<b class="caret"></b></a>' +
         '<ul class="dropdown-menu" role="menu" aria-labelledby="dLabel">' +
-          '<li><a href="https://account.cern.ch/account/">CERN: {{user}}</a></li>' + 
-          '<li><a href="https://github.com/{{githubUser}}">GitHub: {{githubUser}}</a></li>' +
-          '<li class="divider"></li>' +
-          '<li>' +
-          '<a>Signs for: <ul>{{#categories}}<li>{{.}}</li>{{/categories}}</ul></a>' +
-          '</li>' +
-          '<li class="divider"></li>' +
-          '<li><a href="https://login.cern.ch/adfs/ls/?wa=wsignout1.0">Logout</a></li>';
+        '  <li><a href="https://account.cern.ch/account/">CERN: {{user}}</a></li>' + 
+        '  <li><a href="https://github.com/{{githubUser}}">GitHub: {{githubUser}}</a></li>' +
+        '  <li class="divider"></li>' +
+        '  <li>' +
+        '  <a>Signs for: <ul>{{#categories}}<li>{{.}}</li>{{/categories}}</ul></a>' +
+        '  </li>' +
+        '  <li class="divider"></li>' +
+        '  <li><a href="https://login.cern.ch/adfs/ls/?wa=wsignout1.0">Logout</a></li>';
         '</ul>'
     userInfo["canSign"] = userCanSign;
     $("#dropdownMenu").html(Mustache.render(userMenuTmpl, view));
