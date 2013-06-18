@@ -6,14 +6,8 @@
 # branch_name: name of the branch to be created.
 # branch_start_point: startpoint for the branch.
 
-import os
-import re
-import cgi
-import urllib2
-import urllib
-import random
-import shutil
-import sys
+import os, re, cgi, urllib2, urllib, random
+import shutil, sys
 
 try:
   from hashlib import sha1
