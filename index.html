@@ -215,6 +215,8 @@ $(document).ready(function() {
         $("#myTable thead").html("<tr><th>id</th><th>Pull request title</th>" + headers.join("") + "<th>Actions</th></tr>");
 
         var pullRequests = [];
+        var compiledRow = Mustache.compile(rowTemplate);
+
         for (var pri in d["pull_requests"])
         {
           var pr = d["pull_requests"][pri];
@@ -227,7 +229,7 @@ $(document).ready(function() {
             "repository": userInfo["repository"],
             "signature_buttons": signatures.join("")
           }
-          var row = Mustache.render(rowTemplate, view);
+          var row = compiledRow(view);
           $("#myTable tbody").append(Mustache.render(rowTemplate, view));
           function signAlert(message) {
             $("#myAlert").html('<div class="alert alert-info">' + message + '.<a class="close" data-dismiss="alert" href="#">&times;</a></div></div>');
