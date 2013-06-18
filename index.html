@@ -10,17 +10,7 @@
           <input name="q" type="text" class="search-query" placeholder="Search"/>
         </form>
       <li>
-      <li class="dropdown">
-        <a id="userInfo" class="dropdown-toggle" data-toggle="dropdown" href="#"></a>
-          <ul class="dropdown-menu" role="menu" aria-labelledby="dLabel">
-            <li id="userCern"></li>
-            <li id="userGithub"></li>
-            <li class="divider"></li>
-            <li id="userCategories"></li>
-            <li class="divider"></li>
-            <li><a href="https://login.cern.ch/adfs/ls/?wa=wsignout1.0">Logout</a></li>
-          </ul>
-      </li>
+      <li id="dropdownMenu" class="dropdown"></li>
       <li><a href="http://cms-sw.github.com/cmssw/faq.html">Help</a></li>
     </ul>
   </div>
@@ -107,9 +97,6 @@ var rowTemplate = "<tr id='pr{{number}}' class='ui-widget-content'><td>{{number}
 $(document).ready(function() {
   var userInfoPromise = $.post("api/auth").done(function(d,a,b) {
     $("#formbox").attr("action", "https://github.com/" + d["repository"] + "/search");
-    $("#userInfo").html("Welcome " + d["firstname"] + "<b class='caret'></b>");
-    $("#userCern").html("<a href='#'>CERN: " + d["user"] + "</a>");
-    $("#userGithub").html("<a href='#'>github: " + d["githubUser"] + "</a>");
     var userCategories = d["categories"];
     var userCanSign = {}
     var mapEgroups = {
@@ -141,11 +128,27 @@ $(document).ready(function() {
       userCanSign[realName] = true;
       realCategories[realCategories.length] = realName;
     }
+    var view = {
+      "repository": d["repository"],
+      "firstname": d["firstname"],
+      "user": d["user"],
+      "githubUser": d["githubUser"],
+      "categories": realCategories
+    };
+    var userMenuTmpl = "" +
+        '<a id="userInfo" class="dropdown-toggle" data-toggle="dropdown" href="#">Welcome {{firstname}}<b class="caret"></b></a>' +
+        '<ul class="dropdown-menu" role="menu" aria-labelledby="dLabel">' +
+          '<li><a href="https://account.cern.ch/account/">CERN: {{user}}</a></li>' + 
+          '<li><a href="https://github.com/{{githubUser}}">GitHub: {{githubUser}}</a></li>' +
+          '<li class="divider"></li>' +
+          '<li>' +
+          '<a>Signs for: <ul>{{#categories}}<li>{{.}}</li>{{/categories}}</ul></a>' +
+          '</li>' +
+          '<li class="divider"></li>' +
+          '<li><a href="https://login.cern.ch/adfs/ls/?wa=wsignout1.0">Logout</a></li>';
+        '</ul>'
     userInfo["canSign"] = userCanSign;
-    var categoriesSummaryTmpl = "<a>Signs for: <ul>{{#categories}}<li>{{.}}</li>{{/categories}}</ul></a>";
-    $("#userCategories").html(Mustache.render(categoriesSummaryTmpl, {"categories": realCategories}));
-     
-    foo = userInfo;
+    $("#dropdownMenu").html(Mustache.render(userMenuTmpl, view));
   });
 
   var currentBranch = undefined;
