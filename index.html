@@ -43,6 +43,99 @@
 <script src="js/bootstrap.min.js"></script>
 <script src="js/mustache.min.js"></script>
 <script>
+function mainLoop() {
+  var currentBranch = window.location.hash.slice(1, window.location.hash.length);
+  $(".active").removeClass("active");
+  $("#nav_tab_" + currentBranch).addClass("active");
+  var view = {
+    "current_branch": currentBranch,
+    "github_user": userInfo["githubUser"],
+    "repository": userInfo["repository"],
+    "github_owner": userInfo["github_owner"],
+    "github_repo": userInfo["github_repo"],
+    "has_fork": userInfo["has_fork"],
+  };
+  var emptyTableTemplate = "<h2 class='releaseLink'>" +
+                   "Open topics for <a class='relLink' href='https://github.com/{{repository}}/tree/{{current_branch}}'>{{current_branch}}</a>" +
+                   " branch.</h2>" +
+                   "<table class='table table-condensed'><thead></thead><tbody></tbody></table>" +
+                   "{{#has_fork}}<a class='actionLink' target='_blank' href='https://github.com/{{github_user}}" +
+                   "/{{github_repo}}/pull/new/{{github_owner}}:{{current_branch}}...{{github_user}}:{{current_branch}}'>" +
+                   "Create a new pull request for {{current_branch}}</a>{{/has_fork}}" +
+                   "{{^has_fork}}You do not have a fork of {{github_repo}}." +
+                   "<a class='actionLink' target='_blank' href='https://github.com/{{repository}}/fork'>" +
+                   "Fork it to propose changes.</a>{{/has_fork}}<br/>" +
+                   "<a href='externals#{{current_branch}}' target='_blank'>" +
+                   "Show me architectures & externals for this release series.</a>";
+
+  $("#myTable").html(Mustache.render(emptyTableTemplate, view));
+  $.post("api/queues/" + currentBranch).done(function(d,a,b) {
+    if (!d)
+    {
+      $("#myTable").html("Cannot find any open pull request.");
+      return;
+    }
+    var headers = [];
+    var categories = d["signing_categories"];
+    for (var sci in categories)
+    {
+      headers[categories[sci]] = '<th><div class="vertical-text"><div class="vertical-text__inner">' + sci + "</div></div></th>";
+    }
+    $("#myTable thead").html("<tr><th>id</th><th>Pull request title</th>" + headers.join("") + "<th>Actions</th></tr>");
+
+    var pullRequests = [];
+    var compiledRow = Mustache.compile(rowTemplate);
+    $("#myTable tbody").html("");
+    for (var pri in d["pull_requests"])
+    {
+      var pr = d["pull_requests"][pri];
+
+      var signatures = updateSignatures(pr["number"], pr["signatures"], categories);
+      var view = {
+        "number": pr["number"],
+        "title": pr["title"],
+        "html_url": pr["html_url"],
+        "repository": userInfo["repository"],
+        "signature_buttons": signatures.join("")
+      }
+      var row = compiledRow(view);
+      $("#myTable tbody").append(Mustache.render(rowTemplate, view));
+      function signAlert(message) {
+        $("#myAlert").html('<div class="alert alert-info">' + message + '.<a class="close" data-dismiss="alert" href="#">&times;</a></div></div>');
+      }
+      function errorAlert(message) {
+        $("#myAlert").html('<div class="alert alert-error">' + message + '.<a class="close" data-dismiss="alert" href="#">&times;</a></div></div>');
+      }
+
+      function updateSuccessful(d,a,c)
+      {
+        // Update signarures
+        view["number"] = d["pullRequest"];
+        view["signature_buttons"] = updateSignatures(d["pullRequest"], d["signatures"], categories);
+        var newRow = $(Mustache.render(rowTemplate, view));
+        var oldCells = $("#pr" + d["pullRequest"] + " td");
+        for (var uri = 2; uri < 2+Object.keys(categories).length; ++uri)
+        {
+          var newTd = $($(newRow[0]).children('td')[2]);
+          $(oldCells[uri]).replaceWith(newTd);
+        }
+        $(".alert").alert('close');
+      }
+
+      function createActionCallback(n, api, action) {
+        return function () {
+          var actionLower = action.toLowerCase();
+          signAlert("<strong>" + action + " pull request " + n + "<strong>");
+          $.post("api/pulls/" + n + "/" + api).success(updateSuccessful).error(function(){errorAlert("An error occurred while " + actionLower + " " + n)});
+          return false;
+        };
+      }
+      $("#sign_" + pr["number"]).click(createActionCallback(pr["number"], "sign", "Signing")).error(function(){alert("Error while signing")});
+      $("#reject_" + pr["number"]).click(createActionCallback(pr["number"], "reject", "Rejecting")).error(function(){alert("Error while rejecting")});
+      $("#signAll_" + pr["number"]).click(createActionCallback(pr["number"], "signAll", "Signing all")).error(function(){alert("Error while rejecting")});
+    }
+  });
+}
 var userInfo;
 function enqueue() {
 }
@@ -72,14 +165,14 @@ function updateSignatures(pullRequestId, newSignatures, categories)
     "is_admin": userInfo["isAdmin"],
     "pullrequest_id": pullRequestId
   };
-  var signatureTemplate = "<td>" + 
-                          "{{#can_sign}}" + 
+  var signatureTemplate = "<td>" +
+                          "{{#can_sign}}" +
                           "<a class='btn btn-success btn-mini' id='sign_{{pullrequest_id}}'><i class='icon-thumbs-up icon-white'></i> sign</a>" +
                           "&nbsp;<a class='btn btn-danger btn-mini' id='reject_{{pullrequest_id}}'><i class='icon-thumbs-down icon-white'></i> reject</a>" +
-                          "{{/can_sign}}" + 
-                          "{{#is_admin}}" + 
+                          "{{/can_sign}}" +
+                          "{{#is_admin}}" +
                           "&nbsp;<a class='btn btn-inverse btn-mini' id='signAll_{{pullrequest_id}}'><i class='icon-thumbs-up icon-white'></i> sign all</a>" +
-                          "{{/is_admin}}" + 
+                          "{{/is_admin}}" +
                           "</td>";
 
   signatures[signatures.length] = Mustache.render(signatureTemplate, view);
@@ -95,6 +188,7 @@ var rowTemplate = "<tr id='pr{{number}}' class='ui-widget-content'><td>{{number}
                   "</tr>";
 
 $(document).ready(function() {
+  $(window).bind('hashchange', mainLoop);
   var userInfoPromise = $.post("api/auth").done(function(d,a,b) {
     $("#formbox").attr("action", "https://github.com/" + d["repository"] + "/search");
     var userCategories = d["categories"];
@@ -138,7 +232,7 @@ $(document).ready(function() {
     var userMenuTmpl = "" +
         '<a id="userInfo" class="dropdown-toggle" data-toggle="dropdown" href="#">Welcome {{firstname}}<b class="caret"></b></a>' +
         '<ul class="dropdown-menu" role="menu" aria-labelledby="dLabel">' +
-        '  <li><a href="https://account.cern.ch/account/">CERN: {{user}}</a></li>' + 
+        '  <li><a href="https://account.cern.ch/account/">CERN: {{user}}</a></li>' +
         '  <li><a href="https://github.com/{{githubUser}}">GitHub: {{githubUser}}</a></li>' +
         '  <li class="divider"></li>' +
         '  <li>' +
@@ -153,119 +247,27 @@ $(document).ready(function() {
 
   var currentBranch = undefined;
 
-  userInfoPromise.done(function () {  
+  userInfoPromise.done(function () {
     var currentBranchPromise = $.post("api/queues").done(function(d, a, b) {
-      // Create the tabs
-      var tabs = '<div class="navbar"><div class="navbar-inner"><ul class="nav">';
       if (d.length == 0)
       {
         $("#myAlert").html('<div class="alert alert-error"><strong>No CMSSW_X_Y_Z branches found.</strong></div></div>');
         $("#legend").hide();
         return;
-      } 
-        
+      }
+
       var currentBranch = d[0]["ref"];
       if (window.location.hash)
         currentBranch = window.location.hash.slice(1, window.location.hash.length);
+
       window.location.hash = "#" + currentBranch;
-      for (var i = 0; i != d.length; ++i)
-      {
-        var r = d[i];
-        tabs += "<li";
-        if (currentBranch == r["ref"])
-          tabs += ' class="active"';
-        tabs += "><a href='#" + r["ref"] + "'>" + r["ref"]+ "</a></li>";
-      }
-      tabs += "</ul></div></div>";
-      $("#releaseTabs").html(tabs);
-      var view = {
-        "current_branch": currentBranch,
-        "github_user": userInfo["githubUser"],
-        "repository": userInfo["repository"],
-        "github_owner": userInfo["github_owner"],
-        "github_repo": userInfo["github_repo"],
-        "has_fork": userInfo["has_fork"],
-      };
-
-      var emptyTableTemplate = "<h2 class='releaseLink'>" + 
-                       "Open topics for <a class='relLink' href='https://github.com/{{repository}}/tree/{{current_branch}}'>{{current_branch}}</a>" + 
-                       " branch.</h2>" + 
-                       "<table class='table table-condensed'><thead></thead><tbody></tbody></table>" +
-                       "{{#has_fork}}<a class='actionLink' target='_blank' href='https://github.com/{{github_user}}" +
-                       "/{{github_repo}}/pull/new/{{github_owner}}:{{current_branch}}...{{github_user}}:{{current_branch}}'>" + 
-                       "Create a new pull request for {{current_branch}}</a>{{/has_fork}}" +
-                       "{{^has_fork}}You do not have a fork of {{github_repo}}.<a class='actionLink' target='_blank' href='https://github.com/{{repository}}/fork'>" +
-                       "Fork it to propose changes.</a>{{/has_fork}}<br/><a href='externals#{{current_branch}}' target='_blank'>Show me architectures & externals for this release series.</a>";
-      
-      $("#myTable").html(Mustache.render(emptyTableTemplate, view));
+      // Create the tab container.
+      var tabsTemplate = '<div class="navbar"><div class="navbar-inner"><ul class="nav">' +
+                         "{{#queues}}<li id='nav_tab_{{ref}}' ><a href='#{{ref}}'>{{ref}}</a></i>{{/queues}}" +
+                         "</ul></div></div>";
+      $("#releaseTabs").html(Mustache.render(tabsTemplate, {queues: d}));
     }).done(function(d1, a1, b1) {
-      var currentBranch = window.location.hash.slice(1, window.location.hash.length);
-      $.post("api/queues/" + currentBranch).done(function(d,a,b) {
-        if (!d)
-        {
-          $("#myTable").html("Cannot find any open pull request.");
-          return;
-        }
-        var headers = [];
-        var categories = d["signing_categories"];
-        for (var sci in categories)
-        {
-          headers[categories[sci]] = '<th><div class="vertical-text"><div class="vertical-text__inner">' + sci + "</div></div></th>";
-        }
-        $("#myTable thead").html("<tr><th>id</th><th>Pull request title</th>" + headers.join("") + "<th>Actions</th></tr>");
-
-        var pullRequests = [];
-        var compiledRow = Mustache.compile(rowTemplate);
-
-        for (var pri in d["pull_requests"])
-        {
-          var pr = d["pull_requests"][pri];
-          
-          var signatures = updateSignatures(pr["number"], pr["signatures"], categories);
-          var view = {
-            "number": pr["number"],
-            "title": pr["title"],
-            "html_url": pr["html_url"],
-            "repository": userInfo["repository"],
-            "signature_buttons": signatures.join("")
-          }
-          var row = compiledRow(view);
-          $("#myTable tbody").append(Mustache.render(rowTemplate, view));
-          function signAlert(message) {
-            $("#myAlert").html('<div class="alert alert-info">' + message + '.<a class="close" data-dismiss="alert" href="#">&times;</a></div></div>');
-          }
-          function errorAlert(message) {
-            $("#myAlert").html('<div class="alert alert-error">' + message + '.<a class="close" data-dismiss="alert" href="#">&times;</a></div></div>');
-          }
-
-          function updateSuccessful(d,a,c)
-          {
-            // Update signarures
-            view["number"] = d["pullRequest"]; 
-            view["signature_buttons"] = updateSignatures(d["pullRequest"], d["signatures"], categories);
-            var newRow = $(Mustache.render(rowTemplate, view));
-            var oldCells = $("#pr" + d["pullRequest"] + " td");
-            for (var uri = 2; uri < 2+Object.keys(categories).length; ++uri)
-            {
-              var newTd = $($(newRow[0]).children('td')[2]);
-              $(oldCells[uri]).replaceWith(newTd);
-            } 
-            $(".alert").alert('close');
-          }
-
-          function createActionCallback(n, api, action) {
-            return function () {
-              var actionLower = action.toLowerCase();
-              signAlert("<strong>" + action + " pull request " + n + "<strong>");
-              $.post("api/pulls/" + n + "/" + api).success(updateSuccessful).error(function(){errorAlert("An error occurred while " + actionLower + " " + n)});
-              return false;
-            };
-          }
-          $("#sign_" + pr["number"]).click(createActionCallback(pr["number"], "sign", "Signing")).error(function(){alert("Error while signing")});
-          $("#reject_" + pr["number"]).click(createActionCallback(pr["number"], "reject", "Rejecting")).error(function(){alert("Error while rejecting")});
-          $("#signAll_" + pr["number"]).click(createActionCallback(pr["number"], "signAll", "Signing all")).error(function(){alert("Error while rejecting")});
-        }
-      });
+      mainLoop();
     });
   });
   return;
