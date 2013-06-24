@@ -44,7 +44,10 @@ def getSigningCategories(pullRequest):
     categories = set([category for package in stagedPackages 
                                        for (category, packages) in CMSSW_CATEGORIES.iteritems() 
                                        if package in packages])
-    return encode([x for x in categories])
+    categories = [x for x in categories]
+    if categories == []:
+      categories = ["Core"]
+    return encode(categories)
 
   categories = getRequestCached(format("/repos/%(repository)s/pulls/%(request_id)s/files",
                                        repository=config["repository"],
