@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python26
 #
 # A smallish toolkit for web requests.
 import os

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python26
 import cgi, os, tempfile, shutil
 from ws_sso_content_reader import getContent
 from BeautifulSoup import BeautifulSoup
