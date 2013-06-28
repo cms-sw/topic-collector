@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python26
 ###Description: The tool reads cern web services behind SSO using user certificates
 import os, urllib, urllib2, httplib, cookielib, sys, HTMLParser, re
 from optparse import OptionParser

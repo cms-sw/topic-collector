@@ -26,8 +26,6 @@ a.actionLink:hover {
   line-height: 1.5;
   transform: translate(0,100%) rotate(-90deg);
   transform-origin: 0 0;
-  /*Firefox*/
-  -moz-transform: rotate(-90deg);
   /*Safari*/
   -webkit-transform: rotate(-90deg);
   /*Opera*/

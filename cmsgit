@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python26
 # Helper script to create merge branches in the category repositories.
 #
 # Argument which it takes:
