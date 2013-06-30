@@ -1,10 +1,14 @@
 #!/usr/bin/env python26
-import cgitb
-cgitb.enable()
-import cgi
-import os
-from cjson import encode as dumps
-from cjson import decode as loads
+from secrets import cern_secrets as config
+from urllib import urlencode
+from urlparse import parse_qs
+if config.get("debug", False):
+  import cgitb
+  cgitb.enable()
+import cgi, os, re, sys
+from hashlib import sha1
+from os.path import join
+from json import dumps, loads
 
 from common import debug, call, jsonReply, badRequest, doQuery as _doQuery
 from commands import getstatusoutput
@@ -13,22 +17,36 @@ from time import strftime
 
 buildrequestsMapping = [("id", 0),
    ("pid", 1),
-   ("buildMachine", 2),
-   ("lastSeen", 3),
+   ("machine", 2),
+   ("lastModified", 3),
    ("author", 4),
    ("payload", 5),
-   ("status", 6)]
+   ("state", 6),
+   ("url", 7),
+   ("hostnameFilter", 8),
+   ("architecture", 9),
+   ("release", 10),
+]
 
 buildrequestMapping = [
   ("id", 0),
-  ("payload", 1)
+  ("pid", 1),
+  ("machine", 2),
+  ("lastModified", 3),
+  ("author", 4),
+  ("payload", 5),
+  ("state", 6),
+  ("url", 7),
+  ("hostnameFilter", 8),
+  ("architecture", 9),
+  ("release", 10),
 ]
 
 def columns(mapping):
   return ",".join([k for (k,v) in mapping])
 
 def doQuery(q, mapping = None):
-  error, output = _doQuery(q, "buildrequests.sql3")
+  error, output = _doQuery(q, join(config["tccache"], "buildrequests.sql3"))
   if not output:
     return []
   table = [x.split("@@@") for x in output.split("\n")]
@@ -46,12 +64,24 @@ def getOne(q, mapping = None):
   return r.pop()
     
 def sanitize(s, ok="a-zA-Z0-9:_./-"):
-  re.sub("./", "", re.sub("[^%s]" % ok, "", s))
+  return re.sub("[.]/", "", re.sub("[^%s]" % ok, "", s))
+
+ALLOWED_USERS=["cmsbuild", "davidlt", "eulisse", "muzaffar"]
+BUILD_REQUEST_ADMINS=["cmsbuild", "davidlt", "eulisse", "muzaffar"]
+BUILD_REQUEST_BUILDERS=["cmsbuild"]
+VALID_UPDATES=["state", "url", "machine", "pid", "lastModified"]
+VALID_STATES=["Running", "Pending", "Cancelled", "Stopped", "Failed", "Completed"]
+
+def forbidden():
+  print 'Status: 403 Forbidden\r\n\r\n\r\n';
+  exit(0)
 
 if __name__ == "__main__":
+  user = os.environ.get("ADFS_LOGIN")
   if not os.environ.get("ADFS_LOGIN"):
-    print 'Status: 403 Forbidden\r\n\r\n\r\n';
-    exit(0)
+    forbidden()
+  if not user in ALLOWED_USERS:
+    forbidden() 
 
   etag = os.environ.get("HTTP_IF_NONE_MATCH", "")
   if not os.path.exists("buildrequests.sql3"):
@@ -61,48 +91,132 @@ if __name__ == "__main__":
             "architecture text,"
             "author text,"
             "state text,"
+            "url text,"
             "machine text,"
             "pid integer,"
             "creation text,"
-            "lastModifed text,"
-            "payload text"
+            "lastModified text,"
+            "payload text,"
+            "hostnameFilter text,"
+            "uuid text"
             ");")
 
   pathInfo = os.environ.get("PATH_INFO", "").strip("/")
   requestMethod = os.environ.get("REQUEST_METHOD")
   if requestMethod == "GET":
+    q = parse_qs(os.environ.get("QUERY_STRING", ""))
     if not pathInfo:
-      jsonReply(doQuery("select * from BuildRequests;", buildrequestsMapping))
+      states = []
+      if "state" in q:
+        badStates = [s for s in q["state"][0].split(",") if not s in VALID_STATES]
+        if badStates:
+          badRequest()
+        states = ["BuildRequests.state = \"%s\"" % s for s in q["state"][0].split(",")]
+      stateFilter = ""
+      if states:
+        stateFilter = "WHERE " + " AND ".join(states)
+      query = "SELECT %s FROM BuildRequests %s;" % (columns(buildrequestsMapping), stateFilter)  
+      results = doQuery("SELECT %s FROM BuildRequests %s;" % (columns(buildrequestsMapping), stateFilter), buildrequestsMapping)
+      architectureFilter = "architecture_match" in q and q["architecture_match"][0] or ".*"
+      releaseFilter = "release_match" in q and q["release_match"][0] or ".*"
+      for r in results:
+        payload = r.get("payload", "")
+        r["payload"] = (loads(parse_qs(payload).get("payload", ["{}"])[0]))
+      results = [r for r in results if re.match(releaseFilter, r.get("release", "UNKNOWN"))]
+      results = [r for r in results if re.match(architectureFilter, r.get("architecture", "UNKNOWN"))]
+      jsonReply(results)
     elif pathInfo.isdigit():
-      jsonReply(getOne("select %s from BuildRequests where id = %s;" % (columns(buildrequestMapping), pathInfo), buildrequestMapping))
+      r = getOne("select %s from BuildRequests where id = %s;" % (columns(buildrequestMapping), pathInfo), buildrequestMapping)
+      payload = r.get("payload", "")
+      r["payload"] = (loads(parse_qs(payload).get("payload", ["{}"])[0]))
+      jsonReply(r)
   elif requestMethod == "DELETE":
+    parts = pathInfo.split(",")
+    deletable = []
+    for part in parts:
+      if part.isdigit():
+        deletable += [part]
+    result = []
+    for d in deletable:
+      # Only owner or admins can delete a given request
+      request_id = str(d)
+      ownerQuery = "SELECT author, state FROM BuildRequests WHERE id = %s;" % request_id
+      a = doQuery(ownerQuery, [("author", 0), ("state", 1)])
+      if not len(a) == 1:
+        result += [{"id": request_id, "deleted": False}]
+        continue
+      author = a[0]["author"]
+      state = a[0]["state"]
+      # If the state is running, you cannot delete
+      if state == "Running":
+        result += [{"id": request_id, "deleted": False}]
+        continue
+      if (not author in BUILD_REQUEST_ADMINS) and (not author == user):
+        forbidden()
+      doQuery("DELETE from BuildRequests WHERE id = %s;" % request_id)
+      result += [{"id": request_id, "deleted": True}]
+    jsonReply(result)
+  elif requestMethod == "PATCH":
     if pathInfo.isdigit():
-      doQuery("DELETE from BuildRequests WHERE id = %s;" % pathInfo)
+      # Only builders or authors can update the requests.
+      request_id = str(pathInfo)
+      ownerQuery = "SELECT author FROM BuildRequests WHERE id = %s;" % request_id
+      a = getOne(ownerQuery)
+      if not len(a) == 1:
+        badRequest()
+      if (not a[0] in BUILD_REQUEST_BUILDERS) and (not a[0] == user):
+        forbidden()
+      try:
+        data = sys.stdin.read()
+        data = loads(data)
+      except:
+        badRequest()
+      for (k,v) in data.iteritems():
+        if not k in VALID_UPDATES:
+          badRequest()
+        if k == "state":
+          if v not in VALID_STATES:
+            badRequest()
+      updates = ["%s = \"%s\"" % (k, v) for (k, v) in data.iteritems()]
+      updateQuery = "UPDATE BuildRequests SET %s WHERE id = %s;" % (", ".join(updates), request_id)
+      doQuery(updateQuery)
+      r = getOne("select %s from BuildRequests where id = %s;" % (columns(buildrequestMapping), pathInfo), buildrequestMapping)
+      payload = r.get("payload", "")
+      r["payload"] = (loads(parse_qs(payload).get("payload", ["{}"])[0]))
+      jsonReply(r)
   elif requestMethod == "POST":
     # We assume additional parameters are passed as JSON.
     try:
-      data = loads(sys.stdin.read())
-      arch = data.getvalue("architecture")
-      release_name = data.getvalue("release_name")
+      data = sys.stdin.read()
+      data = loads(data)
+      arch = data.get("architecture")
+      release = data.get("release")
     except:
       badRequest()
-    release_series = re.sub("(CMSSW_[0-9]_[0-9]+).*", "\1_X", release_name)
+    release_series = re.sub("(CMSSW_[0-9]+_[0-9]+).*", "\\1_X", release)
     payload = {
       "architecture": sanitize(data.get("architecture", "")),
-      "release_name": sanitize(data.get("release_name", "")),
-      "repository": sanitize(data.get("repositoty", "cms")),
-      "PKGTOOLS": sanitize(data.get("PKGTOOLS", "IB/%s/%s" % (release_series, arch))),
-      "CMSDIST": sanitize(data.get("CMSDIST", "IB/%s/%s" % (release_series, arch))),
+      "release": sanitize(data.get("release", "")),
+      "repository": sanitize(data.get("repository", "cms")),
+      "PKGTOOLS": sanitize(data.get("PKGTOOLS", "IB/%s/%s" % (release_series, arch)), ok="a-zA-Z0-9./_-"),
+      "CMSDIST": sanitize(data.get("CMSDIST", "IB/%s/%s" % (release_series, arch)), ok="a-zA-Z0-9./_-"),
       "ignoreErrors": data.get("ignoreErrors", "") and True or False,
       "package": sanitize(data.get("package", "cmssw-tool-conf")),
-      "continuations": sanitize(data.get("continuations", ""), ok="a-zA-Z0-9_.,;-"),
+      "continuations": sanitize(data.get("continuations", ""), ok="a-zA-Z0-9_.,:;-"),
       "syncBack": data.get("syncBack", "") and True or False,
       "debug": data.get("debug", "") and True or False,
       "tmpRepository": sanitize(data.get("tmpRepository", os.environ.get("ADFS_LOGIN")), "a-zA-Z0-9.")
     }
-    currentTime = strftime("%Y-%m-%dT%H:%M:%S") 
+    currentTime = strftime("%Y-%m-%dT%H:%M:%S")
+    # We calculate a unique ID to avoid inserting twice the same request.
+    uuid = sha1(payload["release"])
+    uuid.update(payload["architecture"])
+    uuid.update(payload["repository"])
+    uuid.update(payload["PKGTOOLS"])
+    uuid.update(payload["CMSDIST"])
+    uuid.update(payload["tmpRepository"])
     request = [
-      ("release", payload["release_name"]),
+      ("release", payload["release"]),
       ("architecture", payload["architecture"]),
       ("author", os.environ.get("ADFS_LOGIN")),
       ("state", "Pending"),
@@ -110,7 +224,19 @@ if __name__ == "__main__":
       ("machine", ""),
       ("pid", ""),
       ("creation", currentTime),
-      ("lastModifed", currentTime),
-      ("payload", cgi.urlencode(dumps(payload))) 
+      ("lastModified", currentTime),
+      ("hostnameFilter", sanitize(data.get("hostnameFilter", ""), ok="a-zA-Z0-9_.*+-")),
+      ("payload", urlencode({"payload": dumps(payload)})),
+      ("uuid", uuid.hexdigest())
     ]
-    print doQuery("INSERT INTO BuildRequests (%s) VALUES (\"%s\");" % (columns(request), "\",".join([v for (k,v) in request])))
+    query = "INSERT INTO BuildRequests (%s) VALUES (\"%s\");" % (columns(request), "\", \"".join([v for (k,v) in request]))
+    doQuery(query)
+    getQuery = "SELECT %s FROM BuildRequests WHERE uuid = \"%s\";" % (columns(buildrequestMapping), uuid.hexdigest())
+    r = getOne(getQuery, buildrequestMapping)
+    payload = r.get("payload", "")
+    r["payload"] = (loads(parse_qs(payload).get("payload", ["{}"])[0]))
+    jsonReply(r)
+  else:
+    print "Status: 501 Not Implemented"
+    print
+    exit(1)

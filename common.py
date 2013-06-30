@@ -33,10 +33,14 @@ except ImportError:
 # Notice that on slc4 (i.e. lxplus), there is no sqlite available, so we rely
 # on my personal copy of it.
 def doQuery(query, database):
+  AFS_SQLITE="/afs/cern.ch/user/e/eulisse/www/bin/sqlite"
   if os.path.exists("/usr/bin/sqlite3"):
     sqlite="/usr/bin/sqlite3"
+  elif os.path.exists(AFS_SQLITE):
+    sqlite=AFS_SQLITE
   else:
-    sqlite="/afs/cern.ch/user/e/eulisse/www/bin/sqlite"
+    debug("Missing sqlite3")
+  
   return getstatusoutput("echo '%s' | %s -separator @@@ %s" % (query, sqlite, database))
 
 def format(s, **kwds):

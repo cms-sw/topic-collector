@@ -170,7 +170,15 @@ with a Content-Type of ‘application/x-www-form-urlencoded’:
 
     GET /buildrequests
 
-Response:
+## Parameters:
+
+* *state*: a comma separated list of states the request can be in in order to be listed.
+* *architecture_match*: a regular expression which the architecture of the
+  request needs to match in order to be included in the results.
+* *release_match*: a regular expression which the release name of the request
+  needs to match in order to be included in the results.
+
+## Response:
 
     Status: 200 OK
     [
