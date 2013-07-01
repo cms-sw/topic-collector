@@ -147,8 +147,14 @@ if __name__ == "__main__":
         continue
       author = a[0]["author"]
       state = a[0]["state"]
-      # If the state is running, you cannot delete
+      # If the state is running, we cancel it.
+      # If the state is cancelled, we need to wait for being either Failed or Completed.
+      # Otherwise we can delete if we are either admins or we own the request.
       if state == "Running":
+        result += [{"id": request_id, "deleted": False}]
+        cancelQuery = "UPDATE BuildRequest state = \"Cancelled\" WHERE id = %s" % request_id
+        continue
+      if state == "Cancelled":
         result += [{"id": request_id, "deleted": False}]
         continue
       if (not author in BUILD_REQUEST_ADMINS) and (not author == user):
