@@ -170,7 +170,15 @@ with a Content-Type of ‘application/x-www-form-urlencoded’:
 
     GET /buildrequests
 
-Response:
+## Parameters:
+
+* *state*: a comma separated list of states the request can be in in order to be listed.
+* *architecture_match*: a regular expression which the architecture of the
+  request needs to match in order to be included in the results.
+* *release_match*: a regular expression which the release name of the request
+  needs to match in order to be included in the results.
+
+## Response:
 
     Status: 200 OK
     [
@@ -202,11 +210,11 @@ Response:
 
     POST /buildrequests
 
-Arguments:
+#### Arguments:
 
 - `architecture`:
   The architecture of the build request.
-- `release_name`:
+- `release`:
   The release name to which the build belongs.
 - `repository`:
   The name of the repository to use as a source.
@@ -226,29 +234,71 @@ Arguments:
 - `debug`: 
   Debug mode. Optional will default to false.
 
-Input:
+#### Example:
 
-  {
-    "architecture": "slc5_amd64_gcc472",
-    "release_name": "CMSSW_6_2_X_2013-04-08-0200",
-    "repository": "cms",
-    "PKGTOOLS": "ktf:my-branch",
-    "CMSDIST": "ktf:another-branch",
-    "ignoreErrors": true,
-    "package": "cmssw-ib",
-    "continuations": "cmssw-qa:slc5_amd64_gcc472",
-    "syncBack": false,
-    "debug": false
-  }
+    POST /buildrequests
+    {
+      "CMSDIST": "IB/CMSSW_6_2_X/stable", 
+      "PKGTOOLS": "V00-21-XX", 
+      "architecture": "slc5_amd64_gcc472", 
+      "continuations": "", 
+      "debug": false, 
+      "hostnameFilter": ".*", 
+      "ignoreErrors": true, 
+      "package": "uuid", 
+      "release": "CMSSW_6_2_X_2013-07-01-1400", 
+      "release_queue": "CMSSW_6_2_X", 
+      "repository": "cms.week0", 
+      "syncBack": true, 
+      "tmpRepository": "eulisse"
+    }
 
-Response:
+#### Response:
     
     Status: 200
-    To be written
+    {
+      "author": "eulisse", 
+      "url": "", 
+      "lastModified": "2013-07-01T16:54:56", 
+      "pid": "", 
+      "id": "5", 
+      "machine": "", 
+      "state": "Pending", 
+      "architecture": "slc5_amd64_gcc472", 
+      "hostnameFilter": ".*", 
+      "release": "CMSSW_6_2_X_2013-07-01-1400", 
+      "payload": {
+              "repository": "cms.week0",
+              "package": "uuid", 
+              "PKGTOOLS": "V00-21-XX",
+              "ignoreErrors": true, 
+              "CMSDIST": "IB/CMSSW_6_2_X/stable", 
+              "continuations": "", 
+              "syncBack": true, 
+              "architecture": "slc5_amd64_gcc472", 
+              "debug": false, 
+              "release": "CMSSW_6_2_X_2013-07-01-1400",
+              "tmpRepository": "eulisse"}
+    }
+
+#### Errors:
+
+In case a malformed request is done, it returns:
+
+    Status: 400 Bad Request
 
 ### Update the status of the build request.
 
     PATCH /buildrequests/<id>
+
+#### Example
+
+    PATCH /buildrequest/0
+    {
+      "state": "Pending",
+      "url": "http://build-logs.com/0",
+      "pid": 100
+    }
 
 ## Legacy tag collector API
 
