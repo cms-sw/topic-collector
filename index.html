@@ -4,6 +4,11 @@
   <div class="navbar-inner">
   <div class="container-fluid">
     <a class="brand" href="http://cms-sw.github.com/cmssw/faq.html">CMS Topic Collector</a>
+    <ul class="nav">
+      <li class="active"><a href=".">Pull requests</a></li>
+      <li><a href="externals">Externals</a></li>
+      <li><a href="buildrequests">Build requests</a></li>
+    </ul>
     <ul class="nav pull-right">
       <li>
         <form id="formbox" class="navbar-search pull-left" target="_blank" action="https://github.com/cms-sw/cmssw/search">
@@ -45,7 +50,7 @@
 <script>
 function mainLoop() {
   var currentBranch = window.location.hash.slice(1, window.location.hash.length);
-  $(".active").removeClass("active");
+  $("#queuesTabs li.active").removeClass("active");
   $("#nav_tab_" + currentBranch).addClass("active");
   var view = {
     "current_branch": currentBranch,
@@ -262,7 +267,7 @@ $(document).ready(function() {
 
       window.location.hash = "#" + currentBranch;
       // Create the tab container.
-      var tabsTemplate = '<div class="navbar"><div class="navbar-inner"><ul class="nav">' +
+      var tabsTemplate = '<div class="navbar"><div class="navbar-inner"><ul id="queuesTabs" class="nav">' +
                          "{{#queues}}<li id='nav_tab_{{ref}}' ><a href='#{{ref}}'>{{ref}}</a></i>{{/queues}}" +
                          "</ul></div></div>";
       $("#releaseTabs").html(Mustache.render(tabsTemplate, {queues: d}));
