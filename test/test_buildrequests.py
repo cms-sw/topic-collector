@@ -10,7 +10,7 @@ print urlopen(TEST_SERVER_URL).read()
 # Create a request.
 request = {
     "architecture": "slc5_amd64_gcc472",
-    "release_name": "CMSSW_6_2_X_2013-04-08-0200",
+    "release": "CMSSW_6_2_X_2013-04-08-0200",
     "repository": "cms",
     "PKGTOOLS": "ktf:my-branch",
     "CMSDIST": "ktf:another-branch",
@@ -21,9 +21,9 @@ request = {
     "debug": False,
     "hostnameFilter": ".*",
   }
-result = json.loads(urlopen(TEST_SERVER_URL, json.dumps(request)).read())
+result = urlopen(TEST_SERVER_URL, json.dumps(request)).read()
 print result
-print result["id"]
+result = json.loads(result)
 assert(result["hostnameFilter"] == ".*")
 # Update the lastModiied timestamp.
 update = {
@@ -40,6 +40,7 @@ assert(result["pid"] == "100")
 assert(result["state"] == "Stopped")
 assert(result["url"] == "http://www.foo.bar")
 # Delete the request just created.
+exit(0)
 print "delete"
 req = Request(url=TEST_SERVER_URL + "/" + str(int(result["id"])-1) + "," + result["id"])
 req.get_method = lambda : "DELETE"

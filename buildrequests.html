@@ -61,11 +61,47 @@ function mainLoop() {
   $.get("../buildrequests?state=" + currentState).done(function(d,a,b) {
     $("#myAlert").html("");
     var table = "";
-    var tableRow = "<tr><td>{{id}}</td><td>{{release}}</td><td>{{payload.package}}</td><td>{{payload.repository}}</td>" + 
-                   "<td>{{architecture}}</td><td>{{payload.PKGTOOLS}}</td><td>{{payload.CMSDIST}}</td>" + 
+    var tableRow = "<tr><td>{{id}}</td><td>{{release}}</td>" + 
+                   "<td><a href='https://github.com/{{CMSDIST_USER_REPO}}/cmsdist/blob/{{CMSDIST_BRANCH}}/{{payload.package}}.spec'>{{payload.package}}</a></td>" +
+                   "<td><a href='http://cmsrep.cern.ch/cmssw/{{payload.repository}}/'>{{payload.repository}}</a></td>" +
+                   "<td><a href='http://cmsrep.cern.ch/cmssw/{{payload.repository}}/RPMS/{{architecture}}/'>{{architecture}}</a></td>" +
+                   "<td><a href='https://github.com/{{PKGTOOLS_USER_REPO}}/pkgtools/tree/{{PKGTOOLS_BRANCH}}'>{{payload.PKGTOOLS}}</a></td>" + 
+                   "<td><a href='https://github.com/{{CMSDIST_USER_REPO}}/cmsdist/tree/{{CMSDIST_BRANCH}}'>{{payload.CMSDIST}}</a></td>" + 
                    "<td>{{#url}}<a href='{{url}}'>{{/url}}{{#machine}}{{machine}} (pid:{{pid}}){{/machine}}{{#url}}</a>{{/url}}</td>";
     for (var i = 0; i < d.length; ++i)
+    {
+      var pkgtools = d[i]["payload"]["PKGTOOLS"];
+      d[i]["PKGTOOLS_USER_REPO"] = function() {
+        return function() {
+          if (pkgtools.indexOf(":") === -1)
+            return "cms-sw";
+          return pkgtools.split(":")[0];
+        }
+      }
+      d[i]["PKGTOOLS_BRANCH"] = function() {
+        return function(val) {
+          if (pkgtools.indexOf(":") === -1)
+            return pkgtools;
+          return pkgtools.split(":")[1];
+        }
+      }
+      var cmsdist = d[i]["payload"]["CMSDIST"];
+      d[i]["CMSDIST_USER_REPO"] = function() {
+        return function() {
+          if (cmsdist.indexOf(":") === -1)
+            return "cms-sw";
+          return cmsdist.split(":")[0];
+        }
+      }
+      d[i]["CMSDIST_BRANCH"] = function() {
+        return function() {
+          if (cmsdist.indexOf(":") === -1)
+            return cmsdist;
+          return cmsdist.split(":")[1];
+        }
+      }
       table += Mustache.render(tableRow, d[i]);
+    }
     $("#buildrequests tbody").html(table);
     $("#stateTabs li.active").removeClass("active");
     $("#li_" + currentState).addClass("active");
