@@ -170,7 +170,7 @@ if __name__ == "__main__":
       a = getOne(ownerQuery)
       if not len(a) == 1:
         badRequest()
-      if (not a[0] in BUILD_REQUEST_BUILDERS) and (not a[0] == user):
+      if (not user in BUILD_REQUEST_BUILDERS) and (not user in BUILD_REQUEST_ADMINS) and (not a[0] == user):
         forbidden()
       try:
         data = sys.stdin.read()
