@@ -375,6 +375,9 @@ if __name__ == "__main__":
   elif pathInfo.startswith("/buildRequestor"):
     f = open("build-request.html")
     httpReply("text/html", etag, htmlHeader, open("default.css"), "</head>", f, "</html>")
+  elif pathInfo.startswith("/buildrequests"):
+    f = open("buildrequests.html")
+    httpReply("text/html", etag, htmlHeader, open("default.css"), "</head>", f, "</html>")
   elif pathInfo.startswith("/externals"):
     f = open("externals.html")
     httpReply("text/html", etag, htmlHeader, open("default.css"), "</head>", f, "</html>")

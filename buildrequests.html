@@ -6,8 +6,8 @@
     <a class="brand" href="http://cms-sw.github.com/cmssw/faq.html">CMS Topic Collector</a>
     <ul class="nav">
       <li><a href=".">Pull requests</a></li>
-      <li class="active"><a href="externals">Externals</a></li>
-      <li><a href="buildrequests">Build requests</a></li>
+      <li><a href="externals">Externals</a></li>
+      <li class="active"><a href="buildrequests">Build requests</a></li>
     </ul>
     <ul class="nav pull-right">
       <li>
@@ -23,8 +23,8 @@
             <li class="divider"></li>
             <li><a href="https://login.cern.ch/adfs/ls/?wa=wsignout1.0">Logout</a></li>
           </ul>
-          <li><a href="http://cms-sw.github.com/cmssw/faq.html">Help</a></li>
       </li>
+      <li><a href="http://cms-sw.github.com/cmssw/faq.html">Help</a></li>
     </ul>
   </div>
   </div>
@@ -36,14 +36,14 @@
 </div>
 <div class="row-fluid">
   <div class="container-fluid">
-    <div id="releaseTabs" class="span12"></div>
+    <div id="stateTabs" class="span12"></div>
   </div>
 </div>
 <div class="row-fluid">
   <div class="container-fluid">
-    <table id="externals" class="table">
+    <table id="buildrequests" class="table">
     <thead>
-      <tr><th>Architecture</th><th>PKGTOOLS</th><th>CMSDIST</th></tr>
+      <tr><th>Id</th><th>Release</th><th>Package</th><th>Repository</th><th>Architecture</th><th>PKGTOOLS</th><th>CMSDIST</th><th>Machine</th></tr>
     </thead>
     <tbody>
     </tbody>
@@ -56,22 +56,24 @@
 <script>
 
 function mainLoop() {
-  var currentBranch = window.location.hash.slice(1, window.location.hash.length);
-  $("#releaseTabs li.active").removeClass("active");
-  $.get("../externals/" + currentBranch).done(function(d,a,b) {
+  var currentState = window.location.hash.slice(1, window.location.hash.length);
+  $("#stateTabs li.active").removeClass("active");
+  $.get("../buildrequests?state=" + currentState).done(function(d,a,b) {
     $("#myAlert").html("");
     var table = "";
-    var tableRow = "<tr><td>{{SCRAM_ARCH}}</td><td>{{PKGTOOLS_TAG}}</td><td>{{CMSDIST_TAG}}</td></th>";
+    var tableRow = "<tr><td>{{id}}</td><td>{{release}}</td><td>{{payload.package}}</td><td>{{payload.repository}}</td>" + 
+                   "<td>{{architecture}}</td><td>{{payload.PKGTOOLS}}</td><td>{{payload.CMSDIST}}</td>" + 
+                   "<td>{{#url}}<a href='{{url}}'>{{/url}}{{#machine}}{{machine}} (pid:{{pid}}){{/machine}}{{#url}}</a>{{/url}}</td>";
     for (var i = 0; i < d.length; ++i)
       table += Mustache.render(tableRow, d[i]);
-    $("#externals tbody").html(table);
-    $("#releaseTabs li.active").removeClass("active");
-    $("#li_" + currentBranch).addClass("active");
+    $("#buildrequests tbody").html(table);
+    $("#stateTabs li.active").removeClass("active");
+    $("#li_" + currentState).addClass("active");
   }).error(function(d,a,b){
-    $("#externals tbody").html("");
-    $("#releaseTabs li.active").removeClass("active");
-    $("#li_" + currentBranch).addClass("active");
-    $("#myAlert").html('<div class="alert alert-error"><strong>No CMSDIST branch for ' + currentBranch + '.</strong></div></div>');
+    $("#buildrequests tbody").html("");
+    $("#stateTabs li.active").removeClass("active");
+    $("#li_" + currentState).addClass("active");
+    $("#myAlert").html('<div class="alert alert-error"><strong>Unable to find build requests.</strong></div></div>');
   });
 }
 
@@ -120,38 +122,30 @@ $(document).ready(function() {
      
   });
 
-  var currentBranch = undefined;
+  var currentState = "Running";
 
-  userInfoPromise.done(function () {  
-    var currentBranchPromise = $.get("../externals").done(function(d, a, b) {
-      // Create the tabs
-      var tabs = '<div class="navbar"><div class="navbar-inner"><ul class="nav">';
-      if (d.length == 0)
-      {
-        $("#myAlert").html('<div class="alert alert-error"><strong>No CMSSW_X_Y_Z branches found.</strong></div></div>');
-        return;
-      }
+  var d = ["Pending", "Running", "Failed", "Cancelled", "Completed"];
+  // Create the tabs
+  var tabs = '<div class="navbar"><div class="navbar-inner"><ul class="nav">';
  
-      var currentBranch = d[0]["ref"];
-      if (window.location.hash)
-        currentBranch = window.location.hash.slice(1, window.location.hash.length);
-      
-      var releaseQueueTemplate = "<li id='li_{{queue}}' {{#active}}class='active'{{/active}}><a href='externals#{{queue}}'>{{queue}}</a></li>";
-      for (var i = 0; i != d.length; ++i)
-      {
-        var r = d[i];
-        var view = {
-          active: currentBranch == r["ref"],
-          queue: r["ref"]
-        }
-        tabs += Mustache.render(releaseQueueTemplate, view);
-      }
-      tabs += "</ul></div></div>";
-      $("#releaseTabs").html(tabs);
-      window.location.hash = "#" + currentBranch;
-      mainLoop();
-    });
-  });
+  var currentState = "Running";
+  if (window.location.hash)
+    currentState = window.location.hash.slice(1, window.location.hash.length);
+  
+  var stateTemplate = "<li id='li_{{state}}' {{#active}}class='active'{{/active}}><a href='buildrequests#{{state}}'>{{state}}</a></li>";
+  for (var i = 0; i != d.length; ++i)
+  {
+    var r = d[i];
+    var view = {
+      active: currentState == r,
+      state: r
+    }
+    tabs += Mustache.render(stateTemplate, view);
+  }
+  tabs += "</ul></div></div>";
+  $("#stateTabs").html(tabs);
+  window.location.hash = "#" + currentState;
+  mainLoop();
 });
 
 </script>
