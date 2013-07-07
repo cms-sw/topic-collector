@@ -63,7 +63,7 @@ function mainLoop() {
   var emptyTableTemplate = "<h2 class='releaseLink'>" +
                    "Open topics for <a class='relLink' href='https://github.com/{{repository}}/tree/{{current_branch}}'>{{current_branch}}</a>" +
                    " branch.</h2>" +
-                   "<table class='table table-condensed'><thead></thead><tbody></tbody></table>" +
+                   "<table class='table table-striped table-condensed table-bordered'><thead></thead><tbody></tbody></table>" +
                    "{{#has_fork}}<a class='actionLink' target='_blank' href='https://github.com/{{github_user}}" +
                    "/{{github_repo}}/pull/new/{{github_owner}}:{{current_branch}}...{{github_user}}:{{current_branch}}'>" +
                    "Create a new pull request for {{current_branch}}</a>{{/has_fork}}" +
@@ -149,13 +149,13 @@ function updateSignatures(pullRequestId, newSignatures, categories)
 {
   var signatures = [];
   var signatureValues = {
-    "signed": "<td align='middle' class='approved'>&#9679;</td>",
-    "pending": "<td align='middle' class='pending'>&#9650;</td>",
-    "rejected": "<td align='middle' class='rejected'>&#9632;</td>",
+    "signed": "<td style='text-align: center;' align='middle' class='approved'>&#9679;</td>",
+    "pending": "<td style='text-align: center;' align='middle' class='pending'>&#9650;</td>",
+    "rejected": "<td style='text-align: center;' align='middle' class='rejected'>&#9632;</td>",
   }
   // Reset all signatures.
   for (var si = 0; si < Object.keys(categories).length; ++si)
-    signatures[si] = "<td align='middle'>-</td>";
+    signatures[si] = "<td style='text-align: center;' align='middle'>-</td>";
   var canSign = false;
   // Change to active those for which we have a signature
   for (var signature in newSignatures)

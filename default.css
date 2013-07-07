@@ -99,7 +99,7 @@ font-size: 18px;
 #myTable {
 width: 80%;
 }
-table {
+table thead{
 background-color: rgb(250, 250, 251);
 border: 1px solid #ddd;
 border-collapse: collapse;
