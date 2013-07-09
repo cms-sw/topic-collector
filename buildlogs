@@ -1,0 +1,53 @@
+#!/usr/bin/env python26
+import bottle, os, re
+from bottle import route, debug
+from commands import getstatusoutput
+from time import strptime
+app = bottle.default_app()
+from secrets import cern_secrets as config
+debug(config["debug"])
+
+def format(s, **kwds):
+  return s % kwds
+
+BASE_AFS_DIR="/afs/cern.ch/cms/sw/ReleaseCandidates"
+@route('/')
+def index():
+    return 'Index'
+
+def sanitize(s, ok="a-zA-Z0-9_.-"):
+  return re.sub("[.]/", "", re.sub("[^%s]" % ok, "", s))
+
+@route('/<architecture>/<release>/<subsystem>/<package>')
+def hello(architecture, release, subsystem, package):
+  return extractLogs(architecture, release, format("%(subsystem)s/%(package)s/log.html", subsystem=subsystem, package=package), "./")
+
+DAYS=["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+
+@route('/<architecture>/<release>')
+def listPackages(architecture, release):
+  return extractLogs(architecture, release, "index.html", "./" + release)
+
+def extractLogs(architecture, release, filename, remapping):
+  m = re.match(".*(20[0-9][0-9]-[0-9]{2}-[0-9]{2}-[0-9]{4})$", release)
+  if not m:
+    abort("400", "Bad Request")
+  d = strptime(m.group(1), "%Y-%m-%d-%H%M")
+  m = re.match("CMSSW_([0-9]+)_([0-9]+)_.*", release)
+  if not m:
+    abort("400", "Bad Request")
+  queue="%s.%s" % m.groups()
+  command = format("tar xOzf %(basedir)s/%(architecture)s/www/%(weekday)s/%(queue)s-%(weekday)s-%(hour)s/%(release)s/new/html-logs.tgz ./%(filename)s | sed -e's|http://cern.ch/cms-sdt/rc/.*/new|%(remapping)s|g;s|/log.html||g'",
+                   architecture=sanitize(architecture),
+                   weekday=DAYS[d.tm_wday],
+                   queue=sanitize(queue),
+                   hour='%02i' % d.tm_hour,
+                   release=sanitize(release),
+                   basedir=BASE_AFS_DIR,
+                   filename=filename,
+                   remapping=remapping)
+  return getstatusoutput(command)
+
+if __name__ == '__main__':
+    from wsgiref.handlers import CGIHandler
+    CGIHandler().run(app)
