@@ -1,6 +1,7 @@
 #!/usr/bin/env python26
 import bottle, os, re
-from bottle import route, debug
+from os.path import exists
+from bottle import route, debug, abort
 from commands import getstatusoutput
 from time import strptime
 app = bottle.default_app()
@@ -31,22 +32,29 @@ def listPackages(architecture, release):
 def extractLogs(architecture, release, filename, remapping):
   m = re.match(".*(20[0-9][0-9]-[0-9]{2}-[0-9]{2}-[0-9]{4})$", release)
   if not m:
-    abort("400", "Bad Request")
+    abort(400, "Bad Request")
   d = strptime(m.group(1), "%Y-%m-%d-%H%M")
   m = re.match("CMSSW_([0-9]+)_([0-9]+)_.*", release)
   if not m:
-    abort("400", "Bad Request")
+    abort(400, "Bad Request")
   queue="%s.%s" % m.groups()
-  command = format("tar xOzf %(basedir)s/%(architecture)s/www/%(weekday)s/%(queue)s-%(weekday)s-%(hour)s/%(release)s/new/html-logs.tgz ./%(filename)s | sed -e's|http://cern.ch/cms-sdt/rc/.*/new|%(remapping)s|g;s|/log.html||g'",
-                   architecture=sanitize(architecture),
-                   weekday=DAYS[d.tm_wday],
-                   queue=sanitize(queue),
-                   hour='%02i' % d.tm_hour,
-                   release=sanitize(release),
-                   basedir=BASE_AFS_DIR,
+  archive = format("%(basedir)s/%(architecture)s/www/%(weekday)s/%(queue)s-%(weekday)s-%(hour)s/%(release)s/new/html-logs.tgz",
+                  architecture=sanitize(architecture),
+                  weekday=DAYS[d.tm_wday],
+                  queue=sanitize(queue),
+                  hour='%02i' % d.tm_hour,
+                  release=sanitize(release),
+                  basedir=BASE_AFS_DIR)
+  if not exists(archive):
+    abort(400, "Bad Request")
+  command = format("tar xOzf %(archive)s ./%(filename)s | sed -e's|http://cern.ch/cms-sdt/rc/.*/new|%(remapping)s|g;s|/log.html||g'",
+                   archive=archive,
                    filename=filename,
                    remapping=remapping)
-  return getstatusoutput(command)
+  err, out = getstatusoutput(command)
+  if err:
+    abort(400, "Bad Request")
+  return out
 
 if __name__ == '__main__':
     from wsgiref.handlers import CGIHandler
