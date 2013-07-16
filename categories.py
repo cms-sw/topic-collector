@@ -7,7 +7,7 @@ CMSSW_EGROUPS_MAP = {
   "cms-git-alca": "AlCa",
   "cms-git-daq": "DAQ",
   "cms-git-dqm": "DQM",
-  "cms-git-db": "DB",
+  "cms-git-db": "Database",
   "cms-git-docs": "Docs",
   "cms-git-fastsim": "Fast Simulation",
   "cms-git-simulation": "Full Simulation",
