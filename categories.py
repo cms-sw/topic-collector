@@ -4,7 +4,7 @@ import re
 CMSSW_EGROUPS_MAP = {
   "cms-git-core": "Core",
   "cms-git-analysis": "Analysis",
-  "cms-git-alca": "AlCa",
+  "cms-git-alca": "Calibration and Alignment",
   "cms-git-daq": "DAQ",
   "cms-git-dqm": "DQM",
   "cms-git-db": "Database",
